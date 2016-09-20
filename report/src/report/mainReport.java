@@ -275,69 +275,80 @@ public class mainReport {
 	    Double latitude = 0.0;
 	    Double longitude = 0.0;
 	    Timestamp dateEV;
+	    Timestamp dateEVfirst;
 	    String temps ="";
 	    String temps2 ="";
 	    String datem;
 	    int vitesse = 0;
 	    int tmps, nbstop = 0;
-	    int nb =0;
+	    int nb =0, nblecture = 0;
 		
-        String sql = "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first FROM datatmpEvt where deviceID='"+dvId+"' order by deviceID,dateEV;";
+        String sql = "SELECT count(*) as nbinfo FROM datatmpEvt where deviceID='"+dvId+"';";
         try {
 	        rs = s.executeQuery(sql);
-	        for(flag = rs.next(); flag; flag = rs.next())
-	        {
-	        	accountID = rs.getString("accountID");
-	            if(accountID == null)
-	            	accountID = "";
-	            deviceID = rs.getString("deviceID");
-	            if(deviceID == null)
-	            	deviceID = "";
-	            dateEV = rs.getTimestamp("dateEV");
-	            if(dateEV == null)
-	            	dateEV = null;
-	            latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
-	            longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
-	            vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
-	            tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
-	            first = rs.getObject("first") != null ? rs.getBoolean("first") : null;
-	            if (nb==0){ 
-	            	stopsInfos = "Array(";
-	            	deviceIDlast = deviceID;
-	            }
-	            if (first){
-	            	temps2 = null;
-	            	temps = "\"\"";
-	            }else{
-	            	temps = "\"00-00-00 "+getDurationString(tmps)+"\"";
-	            	temps2 = Integer.toString(tmps);
-	            }
-		        if ( vitesse < 1){
-		            //Array(Array(-18.94375, 47.50367, 20151208070953, 289, 0), Array(-18.94341, 47.50208, 71013, 309, 32))
-		            if (deviceIDlast.equals(deviceID)){
-		            	if (nb>0) stopsInfos = stopsInfos + ", ";
-		            	if (nb==0) datem = new SimpleDateFormat("yyyyMMddHHmmss").format(dateEV);
-		            	else datem = new SimpleDateFormat("HHmmss").format(dateEV);
-		            	stopsInfos = stopsInfos + "Array("+latitude+", " + longitude +", " + datem +", "+temps+", " + temps2 + ", "+ vitesse+")";
-		            	nbstop++;
-		            }
-		            else{
-		            	stopsInfos = stopsInfos + ")";
-		                //System.out.println(deviceIDlast);
-		                //System.out.println(stopsInfos);
-		                stopsInfos = "Array(";
-		                nb = -1;
-		            }
-		            nb++;
+	        if (rs.next()) {
+	        	int nbinfo = rs.getObject("nbinfo") != null ? rs.getInt("nbinfo") : null;
+	        	if (nbinfo > 1){
+	                sql = "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first FROM datatmpEvt where deviceID='"+dvId+"' order by deviceID,dateEV;";
+	    	        rs = s.executeQuery(sql);
+	    	        for(flag = rs.next(); flag; flag = rs.next())
+	    	        {
+	    	        	nblecture++;
+	    	        	accountID = rs.getString("accountID");
+	    	            if(accountID == null)
+	    	            	accountID = "";
+	    	            deviceID = rs.getString("deviceID");
+	    	            if(deviceID == null)
+	    	            	deviceID = "";
+	    	            dateEV = rs.getTimestamp("dateEV");
+	    	            if(dateEV == null)
+	    	            	dateEV = null;
+	    	            latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
+	    	            longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
+	    	            vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
+	    	            tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
+	    	            first = rs.getObject("first") != null ? rs.getBoolean("first") : null;
+	    	            if (nb==0){ 
+	    	            	stopsInfos = "Array(";
+	    	            	deviceIDlast = deviceID;
+	    	            }
+	    	            if (first || nblecture==nbinfo){
+	    	            	dateEVfirst = dateEV;
+	    	            	temps2 = null;
+	    	            	temps = "\"\"";
+	    	            }else{
+	    	            	temps = "\"00-00-00 "+getDurationString(tmps)+"\"";
+	    	            	temps2 = Integer.toString(tmps);
+	    	            }
+	    		        if ( vitesse < 1){
+	    		            //Array(Array(-18.94375, 47.50367, 20151208070953, 289, 0), Array(-18.94341, 47.50208, 71013, 309, 32))
+	    		            if (deviceIDlast.equals(deviceID)){
+	    		            	if (nb>0) stopsInfos = stopsInfos + ", ";
+	    		            	if (nb==0 || nblecture==nbinfo) datem = new SimpleDateFormat("yyyyMMddHHmmss").format(dateEV);
+	    		            	else datem = new SimpleDateFormat("HHmmss").format(dateEV);
+	    		            	stopsInfos = stopsInfos + "Array("+latitude+", " + longitude +", " + datem +", "+temps+", " + temps2 + ", "+ vitesse+")";
+	    		            	nbstop++;
+	    		            }
+	    		            else{
+	    		            	stopsInfos = stopsInfos + ")";
+	    		                //System.out.println(deviceIDlast);
+	    		                //System.out.println(stopsInfos);
+	    		                stopsInfos = "Array(";
+	    		                nb = -1;
+	    		            }
+	    		            nb++;
 
-	            }
-	            //System.out.println("accountID:" + accountID + " deviceID:" + deviceID + " date:" + dateEV + " latitude:" + latitude + " longitude:"+longitude + " vitesse:" +vitesse );
-	            deviceIDlast = deviceID;
+	    	            }
+	    	            //System.out.println("accountID:" + accountID + " deviceID:" + deviceID + " date:" + dateEV + " latitude:" + latitude + " longitude:"+longitude + " vitesse:" +vitesse );
+	    	            deviceIDlast = deviceID;
+	    	        }	        		
+	        	}
 	        }
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	        
         if (nbstop > 0){
 	        stopsInfos = stopsInfos + ")";
             sql = "SELECT accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+accountID+"' and deviceID='"+deviceID+"';";
@@ -713,7 +724,8 @@ public class mainReport {
 	                dateEVlast = rs.getTimestamp("timestamp");
 	                latitudelast = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
 	                longitudelast = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
-	                vitesselast = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
+	                //vitesselast = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
+	                vitesselast = 0;
 	                odometerKMlast = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 	                odometerOffsetKMlast = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
 	                statuslast = true;
@@ -747,6 +759,10 @@ public class mainReport {
 			                	statuslast = true;
 			                	duree = 0;
 			                }
+			                	if (first) { 
+			                		duree = 0;
+			                		vitesselast = 0;
+			                	}
 					            sentence = "INSERT INTO datatmpEvt(accountID, deviceID, dateEvt, lat, lon, speed, tmps, first, odometerKM, odometerOffsetKM) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 					            PreparedStatement pstmt = c.prepareStatement(sentence);
 		    	                pstmt.setString(1, acIDlast);
@@ -781,8 +797,8 @@ public class mainReport {
 			                pstmt.setTimestamp(3, dateEVlast);
 			                pstmt.setDouble(4, latitudelast);
 			                pstmt.setDouble(5, longitudelast);
-			                pstmt.setInt(6, vitesselast);
-			                pstmt.setInt(7, duree);
+			                pstmt.setInt(6, 0);
+			                pstmt.setInt(7, 0);
 			                pstmt.setBoolean(8, first);
 			                pstmt.setDouble(9, odometerKMlast);
 			                pstmt.setDouble(10, odometerOffsetKMlast);
