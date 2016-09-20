@@ -34,7 +34,7 @@ public class mainReport {
 	    String user = "gts";
 	    String password = "heryrate93";
 
-	    String accountID = "yama";
+	    String accountID = "telo";
 	    
 	    String pathInfos = "";
 	    String stopsInfos = "";
@@ -51,6 +51,7 @@ public class mainReport {
 	    int nbrdevice = 0;
 
 		File htmlTemplateFile = new File("../report/src/report/template.html");
+		//File htmlTemplateFile = new File("d:\\template-V0.html");
 		String htmlString;
 		htmlString = FileUtils.readFileToString(htmlTemplateFile);
 	    try {
@@ -66,20 +67,20 @@ public class mainReport {
 	        	if (pathInfos != null){
 	        		pathInfos = "<script type=\"text/javascript\"> pathInfos["+i+"] = " + pathInfos + ";</script>";
 	        		Infos = Infos + pathInfos;
-		        	//System.out.println(pathInfos);
+		        	System.out.println(pathInfos);
 	        	}
 		        stopsInfos = createstopsInfos(con, st, deviceID[i]);
 		        if (stopsInfos == null) stopsInfos = createstopsInfosnull(con, st, accountID, deviceID[i]);
 	        	if (stopsInfos != null){
 	        		stopsInfos = "<script type=\"text/javascript\"> stopsInfos["+i+"] = " + stopsInfos + ";</script>";
 	        		Infos = Infos + stopsInfos; 
-		        	//System.out.println(stopsInfos);
+		        	System.out.println(stopsInfos);
 	        	}
 		        eventsInfos = createeventsInfos(con, st, deviceID[i]);
 	        	if (eventsInfos != null){
 	        		eventsInfos = "<script type=\"text/javascript\"> eventsInfos["+i+"] = " + eventsInfos + ";</script>";
 	        		Infos = Infos + eventsInfos; 
-		        	//System.out.println(eventsInfos);
+		        	System.out.println(eventsInfos);
 	        	}
 	        	String pathElts = "path["+i+"]";
 	        	if(pathInfos == null ) pathElts = "null"; 
@@ -89,7 +90,7 @@ public class mainReport {
 	        	if(eventsInfos == null ) eventsElts = "null"; 
 	        	if (i > 0) gMapElts = gMapElts + ", ";
 	        	gMapElts = gMapElts + "new Array("+ pathElts +", " + stopElts + ", " + eventsElts +")";
-	        	System.out.println(Infos);
+	        	//System.out.println(Infos);
 	        	infoTab = infoTab + createinfoTab(con, st, accountID, deviceID[i], i);
 	        }
         	gMapElts = gMapElts + ")";
@@ -114,6 +115,7 @@ public class mainReport {
 	        }
 	    }
 		String title = "Araka";
+		String filename = "";
 		Calendar cal = Calendar.getInstance();
 		cal.add(Calendar.DATE, -1);
 		Date dateBefore1Days = cal.getTime();
@@ -128,7 +130,9 @@ public class mainReport {
 		htmlString = htmlString.replace("$GAT_Titre_date", titre_date);
 		htmlString = htmlString.replace("$GAT_dateBegin", date_trt + " 00:00:00");
 		htmlString = htmlString.replace("$GAT_dateEnd", date_trt + " 23:59:59");
-		File newHtmlFile = new File("d:\\new.html");
+		String datefile = new SimpleDateFormat("dd-MM-yyyy").format(dateBefore1Days);
+		filename = accountID + "_COMPTE-RENDU_" + datefile + ".html";
+		File newHtmlFile = new File("d:\\"+filename);
 		FileUtils.writeStringToFile(newHtmlFile, htmlString);
 
 	}
@@ -264,7 +268,7 @@ public class mainReport {
 		boolean flag;
 		boolean first;
 		ResultSet rs = null;
-		String stopsInfos = "Array(";
+		String stopsInfos ="";
 	    String accountID = "";
 	    String deviceID = "";
 	    String deviceIDlast = "";
@@ -297,7 +301,10 @@ public class mainReport {
 	            vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
 	            tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
 	            first = rs.getObject("first") != null ? rs.getBoolean("first") : null;
-	            if (nb==0) deviceIDlast = deviceID;
+	            if (nb==0){ 
+	            	stopsInfos = "Array(";
+	            	deviceIDlast = deviceID;
+	            }
 	            if (first){
 	            	temps2 = null;
 	            	temps = "\"\"";
@@ -360,12 +367,13 @@ public class mainReport {
 
 	public static String createstopsInfosnull(Connection c, Statement s, String acId, String dvId){
 		ResultSet rs = null;
-		String stopsInfos = "Array(";
+		String stopsInfos = "";
 
         String sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as timestamp, deviceID, latitude, longitude, speedKPH FROM EventData WHERE accountID='"+acId+"' AND deviceID='"+dvId+"' ORDER BY timestamp DESC LIMIT 1;";
         try {
 	        rs = s.executeQuery(sql);
             if (rs.next()) {
+            	stopsInfos = "Array(";
             	int speedKPH = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
                 Timestamp dateEV = rs.getTimestamp("timestamp");
                 double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
@@ -408,12 +416,13 @@ public class mainReport {
 	    int vitesse = 0;
 	    int tmps, nbpath=0;
 	    int nb =0;
-	    String pathinfos = "Array(";
+	    String pathinfos = "";
 		
         String sql = "SELECT count(*) as nbinfo FROM datatmpEvt where deviceID='"+dvId+"';";
         try {
 	        rs = s.executeQuery(sql);
 	        if (rs.next()) {
+	        	pathinfos = "Array(";
 	        	int nbinfo = rs.getObject("nbinfo") != null ? rs.getInt("nbinfo") : null;
 	        	if (nbinfo > 1){
 	                sql = "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first FROM datatmpEvt where deviceID='"+dvId+"' order by dateEV;";
@@ -491,7 +500,7 @@ public class mainReport {
 	public static String createeventsInfos(Connection c, Statement s, String dvId){
 		boolean flag;
 		ResultSet rs=null;
-		String eventsInfos = "Array(";
+		String eventsInfos = "";
 	    String accountID = "";
 	    String deviceID = "";
 	    String deviceIDlast = "";
@@ -509,6 +518,7 @@ public class mainReport {
 	        rs = s.executeQuery(sql);
 	        for(flag = rs.next(); flag; flag = rs.next())
 	        {
+	        	
 	        	accountID = rs.getString("accountID");
 	            if(accountID == null)
 	            	accountID = "";
@@ -528,6 +538,9 @@ public class mainReport {
 	            	latitudelast = latitude;
 	            	longitudelast = longitude;
 	            	speedmax = speed;
+	            }
+	            if (nbevents == 0) {
+	            	eventsInfos = "Array(";
 	            }
 	            //tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
 	            //System.out.println("accountID:" + accountID + " deviceID:" + deviceID + " date:" + dateEV + " latitude:" + latitude + " longitude:"+longitude + " vitesse:" +vitesse );
@@ -716,15 +729,18 @@ public class mainReport {
 		                double odometerKM = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 		                double odometerOffsetKM = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
 		                //System.out.println(acID + " " + devID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + latitude + " "+ longitude + " " + vitesse);
-		                proximite = calculProx(latitude, longitude, latitudelast, longitudelast);
-		                if (devIDlast.equalsIgnoreCase(devID) && vitesse < 1 && vitesselast < 1 && proximite) {
+		                //proximite = calculProx(latitude, longitude, latitudelast, longitudelast);
+		                if (devIDlast.equalsIgnoreCase(devID) && vitesse < 1 && vitesselast < 1) {
 		                	topwrite = false;
 		                }
 		                else {	
 			                long diff = dateEV.getTime() - dateEVlast.getTime() ;
 			                duree = (int) diff / 1000;
 			                if (devIDlast.equalsIgnoreCase(devID)) {
-			                	if (statuslast) first = true;
+			                	if (statuslast) { 
+			                		first = true;
+			                		duree = 0;
+			                	}
 			                	statuslast = false;
 			                }
 			                else {
