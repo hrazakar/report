@@ -2,6 +2,7 @@ package report;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.sql.*;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
@@ -12,6 +13,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
+import org.json.simple.parser.ParseException;
 
 
 
@@ -21,6 +27,7 @@ public class mainReport {
 	private static final DecimalFormat dec = new DecimalFormat("#00.000000");
 	private static String[] deviceID;
 	private static String date_trt;
+    public  static final char    CSV_SEPARATOR_CHAR             = '|';
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		// TODO Auto-generated method stub
@@ -50,6 +57,7 @@ public class mainReport {
 		String titre_date = "";
 	    int nbrdevice = 0;
 
+	    LinkedList<Events> pointsList;
 		File htmlTemplateFile = new File("../report/src/report/template.html");
 		//File htmlTemplateFile = new File("d:\\template-V0.html");
 		String htmlString;
@@ -58,7 +66,7 @@ public class mainReport {
 	        Class.forName("com.mysql.jdbc.Driver");
 	        con = DriverManager.getConnection(url, user, password);
 	        st = con.createStatement();
-	        createTemporaryTable(con, st, accountID); //"FROM_UNIXTIME(dateEvt,'%d%m%Y%H%i%s') CREATE TEMPORARY TABLE datatmpEvt( accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int);";
+	        pointsList = createTemporaryTable(con, st, accountID); //"FROM_UNIXTIME(dateEvt,'%d%m%Y%H%i%s') CREATE TEMPORARY TABLE datatmpEvt( accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int);";
 	        //calculTemp(con, st);
 	        nbrdevice = deviceID.length;
 	        System.out.println("Nombre de device: " + nbrdevice);
@@ -91,7 +99,7 @@ public class mainReport {
 	        	if (i > 0) gMapElts = gMapElts + ", ";
 	        	gMapElts = gMapElts + "new Array("+ pathElts +", " + stopElts + ", " + eventsElts +")";
 	        	//System.out.println(Infos);
-	        	infoTab = infoTab + createinfoTab(con, st, accountID, deviceID[i], i);
+	        	infoTab = infoTab + createinfoTab(con, st, accountID, deviceID[i], i, pointsList);
 	        }
         	gMapElts = gMapElts + ")";
         	System.out.println(gMapElts);
@@ -137,7 +145,7 @@ public class mainReport {
 
 	}
 
-	public static String createinfoTab(Connection c, Statement s, String acId, String dvId, int irang){
+	public static String createinfoTab(Connection c, Statement s, String acId, String dvId, int irang, LinkedList pList){
 	    //<tr>
 	    //	<td>3</td> Rang
 	    //	<td>113</td> Identif
@@ -170,7 +178,7 @@ public class mainReport {
 		int dureearret = 0;
 		
 		infoTab = "<tr><td>"+irang+"</td><td>"+dvId+"</td>";
-        String sql = "SELECT accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+acId+"' and deviceID='"+dvId+"';";
+        String sql = "select accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+acId+"' and deviceID='"+dvId+"';";
         try {
 	        rs = s.executeQuery(sql);
 		
@@ -215,7 +223,28 @@ public class mainReport {
  	            nb++;
            	 }
            	 if (nb > 1){
-           		 distance = (odometerKMlast + odometerOffsetKMlast) - odometreDeb;
+           		 distance = 0.0D;
+           		 for (int i = 0; i < pList.size();i++){
+           			Events evt = (Events) pList.get(i);
+           			if (evt.getDeviceID().equals(dvId)){
+           			  String request = "";
+           			  int k = i + 20;
+           			  if (k >= pList.size()) k = pList.size();
+           			  for (int j = i; j < k; j++) {
+                 		Events evtnxt = (Events) pList.get(j);
+               			if (evtnxt.getDeviceID().equals(dvId)){           				  
+               				request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude();         			
+             			  }
+           			  }
+           			  request = "http://77.72.92.132:5000/viaroute?" + request+"&instructions=false&alt=false";
+           			  String rep = sendGet(request, "viaroute");
+           			  distance = distance + Double.parseDouble(rep)/1000.0;
+           			  request = "";
+           			  i = k - 1;
+           			}
+           		 }
+      			 System.out.println("Distance OSRM: " + distance);  
+           		 //distance = (odometerKMlast + odometerOffsetKMlast) - odometreDeb;
 	             System.out.println("Distance: " + (int)distance + "kms");
 	             System.out.println("Vitesse max: " + speedmax + "kms/h");
 	             System.out.println("Temps roulage: " + (int) dureeroulage + "s");
@@ -275,7 +304,7 @@ public class mainReport {
 	    Double latitude = 0.0;
 	    Double longitude = 0.0;
 	    Timestamp dateEV;
-	    Timestamp dateEVfirst;
+	    Timestamp dateEVfirst, timestamp = null;
 	    String temps ="";
 	    String temps2 ="";
 	    String datem;
@@ -318,7 +347,12 @@ public class mainReport {
 	    	            	temps = "\"\"";
 	    	            }else{
 	    	            	temps = "\"00-00-00 "+getDurationString(tmps)+"\"";
-	    	            	temps2 = Integer.toString(tmps);
+	    	            	//temps2 = Integer.toString(tmps);
+	    	            	Calendar cal = Calendar.getInstance();
+	    	                cal.setTimeInMillis(dateEV.getTime());
+	    	                cal.add(Calendar.SECOND, tmps);
+	    	                timestamp = new Timestamp(cal.getTime().getTime());
+	    	                temps2 = new SimpleDateFormat("HHmmss").format(timestamp); 
 	    	            }
 	    		        if ( vitesse < 1){
 	    		            //Array(Array(-18.94375, 47.50367, 20151208070953, 289, 0), Array(-18.94341, 47.50208, 71013, 309, 32))
@@ -523,8 +557,8 @@ public class mainReport {
 	    Double longitudelast = 0.0;
 	    Timestamp dateEVlast = null;
 	    int speed,speedmax = 0,nbevents=0;
-	    //String sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as dateEvt, deviceID, latitude, longitude, max(speedKPH) as speedKPH FROM EventData WHERE accountID='airtel' and DATE_FORMAT(FROM_UNIXTIME(timestamp),'%y-%m-%d') = DATE_FORMAT(NOW(),'%y-%m-%d');";
-        String sql = "SELECT accountID, dateEvt, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps FROM datatmpEvt where deviceID='"+dvId+"';";
+
+	    String sql = "SELECT accountID, dateEvt, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps FROM datatmpEvt where deviceID='"+dvId+"';";
         try {
 	        rs = s.executeQuery(sql);
 	        for(flag = rs.next(); flag; flag = rs.next())
@@ -678,7 +712,7 @@ public class mainReport {
 		return proxim;	
 	}
 	
-	public static void createTemporaryTable(Connection c, Statement s, String account) {
+	public static LinkedList createTemporaryTable(Connection c, Statement s, String account) {
 		ResultSet rs = null;
 		boolean flag, proximite;
 		boolean first = true;
@@ -691,11 +725,14 @@ public class mainReport {
         double longitudelast = 0;
         double odometerKMlast = 0;
         double odometerOffsetKMlast = 0;
-        int vitesselast = 0;
+        double vitesselast = 0;
         int nbevt=0;
         int duree = 0;
         int i = 0;
-			
+        
+        LinkedList<Events> eventsList = new LinkedList<Events>();	
+        
+        StringBuffer sb = new StringBuffer();
         String sentence = "CREATE TEMPORARY TABLE datatmpEvt( tmpid int NOT NULL AUTO_INCREMENT, accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int, tmps int, first boolean, odometerKM double, odometerOffsetKM double, PRIMARY KEY(tmpid), INDEX(tmpid));";
         try {
     		Statement st = c.createStatement();
@@ -725,7 +762,7 @@ public class mainReport {
 	                latitudelast = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
 	                longitudelast = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
 	                //vitesselast = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
-	                vitesselast = 0;
+	                vitesselast = 0.;
 	                odometerKMlast = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 	                odometerOffsetKMlast = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
 	                statuslast = true;
@@ -737,7 +774,7 @@ public class mainReport {
 		                Timestamp dateEV = rs.getTimestamp("timestamp");
 		                double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
 		                double longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
-		                int vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
+		                double vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
 		                double odometerKM = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 		                double odometerOffsetKM = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
 		                //System.out.println(acID + " " + devID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + latitude + " "+ longitude + " " + vitesse);
@@ -770,7 +807,7 @@ public class mainReport {
 		    	                pstmt.setTimestamp(3, dateEVlast);
 		    	                pstmt.setDouble(4, latitudelast);
 		    	                pstmt.setDouble(5, longitudelast);
-		    	                pstmt.setInt(6, vitesselast);
+		    	                pstmt.setDouble(6, vitesselast);
 		    	                pstmt.setInt(7, duree);
 		    	                pstmt.setBoolean(8, first);
 		    	                pstmt.setDouble(9, odometerKMlast);
@@ -797,7 +834,7 @@ public class mainReport {
 			                pstmt.setTimestamp(3, dateEVlast);
 			                pstmt.setDouble(4, latitudelast);
 			                pstmt.setDouble(5, longitudelast);
-			                pstmt.setInt(6, 0);
+			                pstmt.setDouble(6, 0.0D);
 			                pstmt.setInt(7, 0);
 			                pstmt.setBoolean(8, first);
 			                pstmt.setDouble(9, odometerKMlast);
@@ -821,12 +858,15 @@ public class mainReport {
     				Timestamp dateEV = rs.getTimestamp("dateEvt");
     	            double latitude = rs.getObject("lat") != null ? rs.getDouble("lat") : null;
     	            double longitude = rs.getObject("lon") != null ? rs.getDouble("lon") : null;
-    	            int vitesse = rs.getObject("speed") != null ? rs.getInt("speed") : null;
+    	            double vitesse = rs.getObject("speed") != null ? rs.getInt("speed") : null;
                     int tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
                     first = rs.getObject("first") != null ? rs.getBoolean("first") : null;
 	                double odometerKM = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 	                double odometerOffsetKM = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
-                  System.out.println(accountID + " " + deviceID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + dec.format(latitude) + " "+ dec.format(longitude) + " " + vitesse + " " + tmps + " " + first + " "+odometerKM + " "+odometerOffsetKM);
+                  
+	                eventsList.add(new Events(accountID, deviceID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM));
+	                
+	                System.out.println(accountID + " " + deviceID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + dec.format(latitude) + " "+ dec.format(longitude) + " " + vitesse + " " + tmps + " " + first + " "+odometerKM + " "+odometerOffsetKM);
     	        }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -838,5 +878,54 @@ public class mainReport {
             }
         }*/
         System.out.println("Chargement de la table terminé. Nb="+nbevt);
+        return eventsList;
     }	
+	
+	// HTTP GET request
+	@SuppressWarnings("deprecation")
+	private static String sendGet(String url, String type) {
+		String genreJson;
+		String distance = "0";
+		
+		try {
+			JSONArray genreArray = null;
+			if (type.equalsIgnoreCase("match")){
+				//url = "http://77.72.92.132:5000/match?loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
+				genreJson = IOUtils.toString(new URL(url));
+				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
+
+				genreArray = (JSONArray) genreJsonObject.get("matchings");
+				//System.out.println(genreArray);
+				if (genreArray == null) {
+					System.out.println("JMapData not found in JSON response");
+		            distance = "0";
+		        }
+				else {
+			        // get the first genre
+			        JSONObject firstGenre = (JSONObject) genreArray.get(0);
+			        JSONObject routesummary = (JSONObject) firstGenre.get("route_summary");
+			        distance = routesummary.get("total_distance").toString();
+				}
+			}
+			else {
+				//url = "http://77.72.92.132:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
+				genreJson = IOUtils.toString(new URL(url));
+				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
+				
+				JSONObject firstGenre = (JSONObject) genreJsonObject.get("route_summary");
+				//System.out.println(firstGenre.get("total_distance").toString());
+				distance = firstGenre.get("total_distance").toString();
+			}
+			
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        return distance;    
+	}		
+
 }
