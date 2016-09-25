@@ -17,8 +17,8 @@ import org.apache.commons.io.IOUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
+import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
-
 
 
 public class mainReport {
@@ -29,6 +29,7 @@ public class mainReport {
 	private static String[] deviceSpeedLimit;
 	private static String date_trt;
     public  static final char    CSV_SEPARATOR_CHAR             = '|';
+    private static final double DISTANCE_MINI_ENTRE_POINT = 0.5D; //Distance en kilomètre
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException {
 		// TODO Auto-generated method stub
@@ -47,6 +48,7 @@ public class mainReport {
 	    String pathInfos = "";
 	    String stopsInfos = "";
 	    String eventsInfos = "";
+	    String secuInfos = "";
 		//	<script type="text/javascript">
 		//		stopsInfos[0] = Array(Array(Array(-18.14335, 49.38557, 20151208184519, "", null, 0)), "1273 TAM -WULLING");
 		//	</script>
@@ -59,6 +61,7 @@ public class mainReport {
 	    int nbrdevice = 0;
 
 	    LinkedList<Events> pointsList;
+	    LinkedList<Events> pointsListnw;
 		File htmlTemplateFile = new File("../report/src/report/template.html");
 		//File htmlTemplateFile = new File("d:\\template-V0.html");
 		String htmlString;
@@ -69,13 +72,16 @@ public class mainReport {
 	        st = con.createStatement();
 	        pointsList = createTemporaryTable(con, st, accountID); //"FROM_UNIXTIME(dateEvt,'%d%m%Y%H%i%s') CREATE TEMPORARY TABLE datatmpEvt( accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int);";
 	        //calculTemp(con, st);
+        	System.out.println("pointsList:" + pointsList.size());
 	        nbrdevice = deviceID.length;
 	        System.out.println("Nombre de device: " + nbrdevice);
 	        for (int i=0;i<deviceID.length;i++){
+	        	//pointsListnw = addpoints(accountID, deviceID[i], pointsList);
+	        	//System.out.println("pointsList:" + pointsList.size()+" pointsListnw:" + pointsListnw.size());
 	        	// Creation info du tableau
 	        	infoTab = infoTab + createinfoTab(con, st, accountID, deviceID[i], i, pointsList);
 	        	
-	        	pathInfos = createpathInfos(con, st, deviceID[i]);
+	        	pathInfos = createpathInfos(con, st, deviceID[i], i, pointsList);
 	        	if (pathInfos != null){
 	        		pathInfos = "<script type=\"text/javascript\"> pathInfos["+i+"] = " + pathInfos + ";</script>";
 	        		Infos = Infos + pathInfos;
@@ -103,6 +109,7 @@ public class mainReport {
 	        	if (i > 0) gMapElts = gMapElts + ", ";
 	        	gMapElts = gMapElts + "new Array("+ pathElts +", " + stopElts + ", " + eventsElts +")";
 	        	//System.out.println(Infos);
+	        	secuInfos = secuInfos + createsecuInfos(deviceID[i], i, pointsList);
 	        }
         	gMapElts = gMapElts + ")";
         	System.out.println(gMapElts);
@@ -141,6 +148,7 @@ public class mainReport {
 		htmlString = htmlString.replace("$GAT_Titre_date", titre_date);
 		htmlString = htmlString.replace("$GAT_dateBegin", date_trt + " 00:00:00");
 		htmlString = htmlString.replace("$GAT_dateEnd", date_trt + " 23:59:59");
+		htmlString = htmlString.replace("$GAT_secuInfos", secuInfos);
 		String datefile = new SimpleDateFormat("dd-MM-yyyy").format(dateBefore1Days);
 		filename = accountID + "_COMPTE-RENDU_" + datefile + ".html";
 		File newHtmlFile = new File("d:\\"+filename);
@@ -148,151 +156,232 @@ public class mainReport {
 
 	}
 
-	public static String createinfoTab(Connection c, Statement s, String acId, String dvId, int irang, LinkedList pList){
-	    //<tr>
-	    //	<td>3</td> Rang
-	    //	<td>113</td> Identif
-	    //	<td>9114 TAN -JAC 3.5T</td> Info véhicule
-	    //	<td>2015-12-08 06:59:07</td> date début
-	    //	<td>2015-12-08 13:37:40</td> date fin
-	    //	<td>00-00-00 02:15:34</td> roulage
-	    //	<td>00-00-00 04:22:59</td> Arrêt
-	    //	<td>51</td> distance total
-	    //	<td>22</td> vitesse moyenne
-	    //	<td>79</td> Vitesse max
-	    //	<td><input type="checkbox" style="cursor:pointer;" id="cb3" title="Cliquez ici pour afficher le trajet de ce véhicule" onclick="if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce véhicule';};gMapDisplayData(3, true, true, false);secuDisplayData(3,true);curCheckedRowId=3;this.title='Cliquez ici pour masquer le trajet de ce véhicule';}else {pausePathReplay(true, true);if (sb = document.getElementById('sliderbg' + 3)) sb.style.display = 'none';pathFilterDiv.style.display = 'none';gMapHideData(3, false);secuDisplayData(3,false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce véhicule';};"></td>
-	    //	<input type="checkbox" style="cursor:pointer;" id="cb0" title="Cliquez ici pour afficher le trajet de ce véhicule" onclick="if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce véhicule';};gMapDisplayData(0, true, true, false);secuDisplayData(0,true);curCheckedRowId=0;this.title='Cliquez ici pour masquer le trajet de ce véhicule';}else {gMapHideData(0, false);secuDisplayData(0,false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce véhicule';};">
-	    //	<td>-18.93935 47.56441</td> coordonnée evenement
-	    //</tr>
+	public static String createinfoTab(Connection c, Statement s, String acId, String dvId, int irang,
+			LinkedList pList) {
+		// <tr>
+		// <td>3</td> Rang
+		// <td>113</td> Identif
+		// <td>9114 TAN -JAC 3.5T</td> Info véhicule
+		// <td>2015-12-08 06:59:07</td> date début
+		// <td>2015-12-08 13:37:40</td> date fin
+		// <td>00-00-00 02:15:34</td> roulage
+		// <td>00-00-00 04:22:59</td> Arrêt
+		// <td>51</td> distance total
+		// <td>22</td> vitesse moyenne
+		// <td>79</td> Vitesse max
+		// <td><input type="checkbox" style="cursor:pointer;" id="cb3"
+		// title="Cliquez ici pour afficher le trajet de ce véhicule"
+		// onclick="if (this.checked) {if (isReplayRunning)
+		// pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb =
+		// document.getElementById('sliderbg' + curCheckedRowId))
+		// sb.style.display = 'none';if (cb = document.getElementById('cb' +
+		// curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce
+		// véhicule';};gMapDisplayData(3, true, true,
+		// false);secuDisplayData(3,true);curCheckedRowId=3;this.title='Cliquez
+		// ici pour masquer le trajet de ce véhicule';}else
+		// {pausePathReplay(true, true);if (sb =
+		// document.getElementById('sliderbg' + 3)) sb.style.display =
+		// 'none';pathFilterDiv.style.display = 'none';gMapHideData(3,
+		// false);secuDisplayData(3,false);curCheckedRowId =
+		// -1;this.title='Cliquez ici pour afficher le trajet de ce
+		// véhicule';};"></td>
+		// <input type="checkbox" style="cursor:pointer;" id="cb0"
+		// title="Cliquez ici pour afficher le trajet de ce véhicule"
+		// onclick="if (this.checked) {if (isReplayRunning)
+		// pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb =
+		// document.getElementById('sliderbg' + curCheckedRowId))
+		// sb.style.display = 'none';if (cb = document.getElementById('cb' +
+		// curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce
+		// véhicule';};gMapDisplayData(0, true, true,
+		// false);secuDisplayData(0,true);curCheckedRowId=0;this.title='Cliquez
+		// ici pour masquer le trajet de ce véhicule';}else {gMapHideData(0,
+		// false);secuDisplayData(0,false);curCheckedRowId =
+		// -1;this.title='Cliquez ici pour afficher le trajet de ce
+		// véhicule';};">
+		// <td>-18.93935 47.56441</td> coordonnée evenement
+		// </tr>
 		boolean flag;
 		ResultSet rs = null;
-	    int nb =0;
+		int nb = 0;
 		String infoTab = "";
 		double odometreDeb = 0;
 		double odometreFin = 0;
-        double latitudemax = 0;
-        double longitudemax = 0;
-        double odometerKMlast = 0;
-        double odometerOffsetKMlast = 0;
-        double distance = 0;
-        Timestamp dateEVlast= null, dateEVdeb=null;
+		double latitudemax = 0;
+		double longitudemax = 0;
+		double odometerKMlast = 0;
+		double odometerOffsetKMlast = 0;
+		double distance = 0;
+		Timestamp dateEVlast = null, dateEVdeb = null;
 		int speedmax = 0;
 		int dureeroulage = 0;
 		int dureearret = 0;
-		
-		infoTab = "<tr><td>"+irang+"</td><td>"+dvId+"</td>";
-        String sql = "select accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+acId+"' and deviceID='"+dvId+"';";
-        try {
-	        rs = s.executeQuery(sql);
-		
-            if(rs.next())
-            {
-           	 String vehicleMake = rs.getObject("vehicleMake") != null ? rs.getString("vehicleMake") : null;
-           	 String vehicleModel = rs.getObject("vehicleModel") != null ? rs.getString("vehicleModel") : null;
-           	 String licensePlate = rs.getObject("licensePlate") != null ? rs.getString("licensePlate") : null;
-           	 infoTab = infoTab + "<td>"+licensePlate+" "+vehicleModel+"</td>";
-           	 sql = "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first, odometerKM, odometerOffsetKM FROM datatmpEvt where deviceID='"+dvId+"' order by dateEV;";
-           	 rs = s.executeQuery(sql);
-           	 for(flag = rs.next(); flag; flag = rs.next())
-           	 {
-		        String acID = rs.getObject("accountID") != null ? rs.getString("accountID") : null;
-		        String devID = rs.getObject("deviceID") != null ? rs.getString("deviceID") : null;
-	            Timestamp dateEV = rs.getTimestamp("dateEV");
-	            double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
-	            double longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
-	            int vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
-	            int duree = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
-                double odometerKM = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
-                double odometerOffsetKM = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
-                if (nb == 0){
-                	odometreDeb = odometerKM + odometerOffsetKM;  
-                	dateEVdeb = dateEV;
-                }
- 	            int speed = Math.round(vitesse);
- 	            if (speed > speedmax) {
- 	            	speedmax = speed;
- 	            	latitudemax = latitude;
- 	            	longitudemax = longitude;
- 	            }
- 	            if (speed > 0){ // Calcul temps de roulage
- 	            	dureeroulage = dureeroulage + duree;
- 	            }else{ // Calcul temps d'arrêt
- 	            	dureearret = dureearret + duree;
- 	            } 	            	
-                dateEVlast = dateEV;
-                odometerKMlast = odometerKM;
-                odometerOffsetKMlast = odometerOffsetKM;
 
- 	            nb++;
-           	 }
-           	 if (nb > 1){
-           		 distance = 0.0D;
-           		 for (int i = 0; i < pList.size();i++){
-           			Events evt = (Events) pList.get(i);
-           			if (evt.getDeviceID().equals(dvId)){
-           			  String request = "";
-           			  int k = i + 20;
-           			  if (k >= pList.size()) k = pList.size();
-           			  for (int j = i; j < k; j++) {
-                 		Events evtnxt = (Events) pList.get(j);
-               			if (evtnxt.getDeviceID().equals(dvId)){           				  
-               				request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude();         			
-             			  }
-           			  }
-           			  request = "http://77.72.92.132:5000/viaroute?" + request+"&instructions=false&alt=false";
-           			  String rep = sendGet(request, "viaroute");
-           			  distance = distance + Double.parseDouble(rep)/1000.0;
-           			  request = "";
-           			  i = k - 1;
-           			}
-           		 }
-      			 System.out.println("Distance OSRM: " + distance);  
-           		 //distance = (odometerKMlast + odometerOffsetKMlast) - odometreDeb;
-	             System.out.println("Distance: " + (int)distance + "kms");
-	             System.out.println("Vitesse max: " + speedmax + "kms/h");
-	             System.out.println("Temps roulage: " + (int) dureeroulage + "s");
-	             double vitessemoy =  distance/(dureeroulage/3600.0);
-	             System.out.println("Vitesse moy: " + (int)vitessemoy + " kms/h");
-	             int numberOfDays;
-	             int numberOfHours;
-	             int numberOfMinutes;
-	             int numberOfSeconds;
+		infoTab = "<tr><td>" + irang + "</td><td>" + dvId + "</td>";
+		String sql ="select accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+acId+"' and deviceID='"+dvId+"';"; 
+		try { 
+			rs = s.executeQuery(sql);
+			if(rs.next()) { 
+				String vehicleMake = rs.getObject("vehicleMake") != null ? rs.getString("vehicleMake") : null;
+				String vehicleModel = rs.getObject("vehicleModel") != null ? rs.getString("vehicleModel") : null; 
+				String licensePlate = rs.getObject("licensePlate") != null ? rs.getString("licensePlate") : null; 
+				infoTab = infoTab + "<td>"+licensePlate+" "+vehicleModel+"</td>"; 
+			}
+	    } catch (SQLException ex) {
+	        LOGGER.severe(ex.getMessage());
+	    } 
+		/*
+		 * String sql =
+		 * "select accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"
+		 * +acId+"' and deviceID='"+dvId+"';"; try { rs = s.executeQuery(sql);
+		 * 
+		 * if(rs.next()) { String vehicleMake = rs.getObject("vehicleMake") !=
+		 * null ? rs.getString("vehicleMake") : null; String vehicleModel =
+		 * rs.getObject("vehicleModel") != null ? rs.getString("vehicleModel") :
+		 * null; String licensePlate = rs.getObject("licensePlate") != null ?
+		 * rs.getString("licensePlate") : null; infoTab = infoTab +
+		 * "<td>"+licensePlate+" "+vehicleModel+"</td>"; sql =
+		 * "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first, odometerKM, odometerOffsetKM FROM datatmpEvt where deviceID='"
+		 * +dvId+"' order by dateEV;"; rs = s.executeQuery(sql); for(flag =
+		 * rs.next(); flag; flag = rs.next()) { String acID =
+		 * rs.getObject("accountID") != null ? rs.getString("accountID") : null;
+		 * String devID = rs.getObject("deviceID") != null ?
+		 * rs.getString("deviceID") : null; Timestamp dateEV =
+		 * rs.getTimestamp("dateEV"); double latitude = rs.getObject("latitude")
+		 * != null ? rs.getDouble("latitude") : null; double longitude =
+		 * rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
+		 * int vitesse = rs.getObject("speedKPH") != null ?
+		 * rs.getInt("speedKPH") : null; int duree = rs.getObject("tmps") !=
+		 * null ? rs.getInt("tmps") : null; double odometerKM =
+		 * rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") :
+		 * null; double odometerOffsetKM = rs.getObject("odometerOffsetKM") !=
+		 * null ? rs.getDouble("odometerOffsetKM") : null; if (nb == 0){
+		 * odometreDeb = odometerKM + odometerOffsetKM; dateEVdeb = dateEV; }
+		 * int speed = Math.round(vitesse); if (speed > 0){ // Calcul temps de
+		 * roulage dureeroulage = dureeroulage + duree; }else{ // Calcul temps
+		 * d'arrêt dureearret = dureearret + duree; } dateEVlast = dateEV;
+		 * odometerKMlast = odometerKM; odometerOffsetKMlast = odometerOffsetKM;
+		 * 
+		 * nb++; } } rs.close(); } catch (SQLException e) { // TODO
+		 * Auto-generated catch block e.printStackTrace(); }
+		 */
+		distance = 0.0D;
+		dureearret = 0;
+		dureeroulage = 0;
+		double duree = 0.;
+		double vitessemoy = 0.0;
+		int nbvitesse = 0;
+		int nbreq = 0;
+		for (int i = 0; i < pList.size(); i++) {
+			Events evt = (Events) pList.get(i);
+			if (evt.getDeviceID().equals(dvId)) {
+				String request = "";
+				if (nb == 0)
+					dateEVdeb = evt.getDateEvt();
+				int k = i + 20;
+				if (k >= pList.size())
+					k = pList.size();
+				for (int j = i; j < k; j++) {
+					Events evtnxt = (Events) pList.get(j);
+					if (evtnxt.getDeviceID().equals(dvId)) {
 
-	             //numberOfDays = dureeroulage / 86400;
-	             numberOfHours = ((int)dureeroulage % 86400 ) / 3600 ;
-	             numberOfMinutes = (((int)dureeroulage % 86400 ) % 3600 ) / 60; 
-	             numberOfSeconds = (((int)dureeroulage % 86400 ) % 3600 ) % 60  ;
-	             String roulage = numberOfHours + ":" + numberOfMinutes + ":" + numberOfSeconds;
-	             numberOfHours = ((int)dureearret % 86400 ) / 3600 ;
-	             numberOfMinutes = (((int)dureearret % 86400 ) % 3600 ) / 60; 
-	             numberOfSeconds = (((int)dureearret % 86400 ) % 3600 ) % 60  ;
-	             String arret = numberOfHours + ":" + numberOfMinutes + ":" + numberOfSeconds;
-	             System.out.println("Temps arrêt: " + (int) dureearret + "s" + " "+ arret);
-	             long diff = dateEVlast.getTime() - dateEVdeb.getTime() ;
-	             int dureeTH = (int) diff / 1000;
-	             //if (vitessemoy > 150) vitessemoy = 0;
-	             System.out.println("Temps Total: " + dureeTH + "s");
-	             infoTab = infoTab + "<td>"+new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dateEVdeb)+"</td>";
-	             infoTab = infoTab + "<td>"+new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dateEVlast)+"</td>";
-	             infoTab = infoTab + "<td>00-00-00 "+roulage+"</td>";
-	             infoTab = infoTab + "<td>00-00-00 "+arret+"</td>";
-	             infoTab = infoTab + "<td>"+(int)distance+"</td>";
-	             infoTab = infoTab + "<td>"+(int)vitessemoy+"</td>";
-	             infoTab = infoTab + "<td>"+speedmax+"</td>";
-	             infoTab = infoTab + "<td><input type=\"checkbox\" style=\"cursor:pointer;\" id=\"cb"+irang+"\" title=\"Cliquez ici pour afficher le trajet de ce véhicule\" onclick=\"if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce véhicule';};gMapDisplayData("+irang+", true, true, false);secuDisplayData("+irang+",true);curCheckedRowId="+irang+";this.title='Cliquez ici pour masquer le trajet de ce véhicule';}else {pausePathReplay(true, true);if (sb = document.getElementById('sliderbg' + "+irang+")) sb.style.display = 'none';pathFilterDiv.style.display = 'none';gMapHideData("+irang+", false);secuDisplayData("+irang+",false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce véhicule';};\"></td>";
-	             infoTab = infoTab + "<td>"+dec.format(latitudemax) + " "+ dec.format(longitudemax)+"</td></tr>";
-           	 }else {
-           		 infoTab = infoTab + "<td></td><td></td><td></td><td></td><td>0</td><td>0</td><td>0</td>";
-           		 infoTab = infoTab + "<td><input type=\"checkbox\" style=\"cursor:pointer;\" id=\"cb"+irang+"\" title=\"Cliquez ici pour afficher le trajet de ce véhicule\" onclick=\"if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce véhicule';};gMapDisplayData("+irang+", true, true, false);secuDisplayData("+irang+",true);curCheckedRowId="+irang+";this.title='Cliquez ici pour masquer le trajet de ce véhicule';}else {gMapHideData("+irang+", false);secuDisplayData("+irang+",false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce véhicule';};\"></td>";
-	             infoTab = infoTab + "<td></td></tr>";
-           	 }
-            }
-            rs.close();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+							if (evtnxt.getSpeed() > 0) {
+								if (j + 1 < pList.size()) {
+									duree = 0;
+									Events evtp = (Events) pList.get(j + 1);
+									if (evtp.getDeviceID().equals(dvId)) 
+										duree = (evtp.getDateEvt().getTime() - evtnxt.getDateEvt().getTime()) / 1000.0;
+								}
+								dureeroulage = (int) (dureeroulage + duree); // Calcul
+																				// temps
+																				// de
+																				// roulage
+							} else{
+								duree = 0;
+								if (j + 1 < pList.size()) {
+									Events evtp = (Events) pList.get(j + 1);
+									if (evtp.getDeviceID().equals(dvId)) 
+										duree = (evtp.getDateEvt().getTime() - evtnxt.getDateEvt().getTime()) / 1000.0;
+								}
+								dureearret = (int) (dureearret + duree); // Calcul temps d'arrêt
+							}	
+
+						if (evtnxt.getSpeed() > speedmax) {
+							speedmax = (int) evtnxt.getSpeed();
+							latitudemax = evtnxt.getLatitude();
+							longitudemax = evtnxt.getLongitude();
+							vitessemoy = vitessemoy + (int) evtnxt.getSpeed();
+							nbvitesse++;
+						}
+						request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude();
+						nbreq++;
+					}
+				}
+				if (nbreq > 1) {
+					request = "http://77.72.92.132:5000/viaroute?" + request + "&instructions=false&alt=false";
+					String rep = sendGet(request, "viaroute");
+					distance = distance + Double.parseDouble(rep) / 1000.0;
+				}
+				nbreq = 0;
+				dateEVlast = evt.getDateEvt();
+				request = "";
+				i = k - 1;
+				nb++;
+			}
 		}
-        System.out.println("infoTab: "+ infoTab);
+		if (nb > 1) {
+			System.out.println("Distance OSRM: " + distance);
+			// distance = (odometerKMlast + odometerOffsetKMlast) - odometreDeb;
+			System.out.println("Distance: " + (int) distance + "kms");
+			System.out.println("Vitesse max: " + speedmax + "kms/h");
+			System.out.println("Temps roulage: " + (int) dureeroulage + "s");
+			//double vitessemoy = distance / (dureeroulage / 3600.0);
+			vitessemoy = vitessemoy / nbvitesse;
+			System.out.println("Vitesse moy: " + (int) vitessemoy + " kms/h");
+			int numberOfDays;
+			int numberOfHours;
+			int numberOfMinutes;
+			int numberOfSeconds;
+
+			// numberOfDays = dureeroulage / 86400;
+			numberOfHours = ((int) dureeroulage % 86400) / 3600;
+			numberOfMinutes = (((int) dureeroulage % 86400) % 3600) / 60;
+			numberOfSeconds = (((int) dureeroulage % 86400) % 3600) % 60;
+			String roulage = numberOfHours + ":" + numberOfMinutes + ":" + numberOfSeconds;
+			numberOfHours = ((int) dureearret % 86400) / 3600;
+			numberOfMinutes = (((int) dureearret % 86400) % 3600) / 60;
+			numberOfSeconds = (((int) dureearret % 86400) % 3600) % 60;
+			String arret = numberOfHours + ":" + numberOfMinutes + ":" + numberOfSeconds;
+			System.out.println("Temps arrêt: " + (int) dureearret + "s" + " " + arret);
+			// long diff = dateEVlast.getTime() - dateEVdeb.getTime() ;
+			// int dureeTH = (int) diff / 1000;
+			// if (vitessemoy > 150) vitessemoy = 0;
+			// System.out.println("Temps Total: " + dureeTH + "s");
+			infoTab = infoTab + "<td>" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dateEVdeb.getTime()) + "</td>";
+			infoTab = infoTab + "<td>" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(dateEVlast.getTime()) + "</td>";
+			infoTab = infoTab + "<td>00-00-00 " + roulage + "</td>";
+			infoTab = infoTab + "<td>00-00-00 " + arret + "</td>";
+			infoTab = infoTab + "<td>" + (int) distance + "</td>";
+			infoTab = infoTab + "<td>" + (int) vitessemoy + "</td>";
+			infoTab = infoTab + "<td>" + speedmax + "</td>";
+			infoTab = infoTab + "<td><input type=\"checkbox\" style=\"cursor:pointer;\" id=\"cb" + irang
+					+ "\" title=\"Cliquez ici pour afficher le trajet de ce v&eacute;hicule\" onclick=\"if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce v&eacutehicule';};gMapDisplayData("
+					+ irang + ", true, true, false);secuDisplayData(" + irang + ",true);curCheckedRowId=" + irang
+					+ ";this.title='Cliquez ici pour masquer le trajet de ce v&eacute;hicule';}else {pausePathReplay(true, true);if (sb = document.getElementById('sliderbg' + "
+					+ irang + ")) sb.style.display = 'none';pathFilterDiv.style.display = 'none';gMapHideData(" + irang
+					+ ", false);secuDisplayData(" + irang
+					+ ",false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce v&eacute;;hicule';};\"></td>";
+			infoTab = infoTab + "<td>" + (latitudemax) + " " + (longitudemax) + "</td></tr>";
+		} else {
+			infoTab = infoTab + "<td></td><td></td><td></td><td></td><td>0</td><td>0</td><td>0</td>";
+			infoTab = infoTab + "<td><input type=\"checkbox\" style=\"cursor:pointer;\" id=\"cb" + irang
+					+ "\" title=\"Cliquez ici pour afficher le trajet de ce v&eacute;hicule\" onclick=\"if (this.checked) {if (isReplayRunning) pausePathReplay(true, true);if (curCheckedRowId > -1) {if (sb = document.getElementById('sliderbg' + curCheckedRowId)) sb.style.display = 'none';if (cb = document.getElementById('cb' + curCheckedRowId)) cb.title='Cliquez ici pour afficher le trajet de ce v&eacutehicule';};gMapDisplayData("
+					+ irang + ", true, true, false);secuDisplayData(" + irang + ",true);curCheckedRowId=" + irang
+					+ ";this.title='Cliquez ici pour masquer le trajet de ce v&eacute;hicule';}else {gMapHideData(" + irang
+					+ ", false);secuDisplayData(" + irang
+					+ ",false);curCheckedRowId = -1;this.title='Cliquez ici pour afficher le trajet de ce v&eacute;hicule';};\"></td>";
+			infoTab = infoTab + "<td></td></tr>";
+		}
+		System.out.println("infoTab: " + infoTab);
 		return infoTab;
 	}
 	
@@ -449,7 +538,7 @@ public class mainReport {
 		return stopsInfos;
 	}
 
-	public static String createpathInfos(Connection c, Statement s, String dvId){
+	public static String createpathInfos(Connection c, Statement s, String dvId, int irang, LinkedList pList){
 		boolean flag, first;
 		ResultSet rs = null;
 	    String accountID = "";
@@ -465,8 +554,9 @@ public class mainReport {
 	    int tmps, nbpath=0;
 	    int nb =0;
 	    String pathinfos = "";
+	    int indexbegin = 0, indexend = 0;
 		
-        String sql = "SELECT count(*) as nbinfo FROM datatmpEvt where deviceID='"+dvId+"';";
+        /*String sql = "SELECT count(*) as nbinfo FROM datatmpEvt where deviceID='"+dvId+"';";
         try {
 	        rs = s.executeQuery(sql);
 	        if (rs.next()) {
@@ -518,10 +608,42 @@ public class mainReport {
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-        if (nbpath > 0){
+		}*/
+  		for (int i = 0; i < pList.size();i++){
+  			Events evt = (Events) pList.get(i);
+  			accountID = evt.getAccountID();
+  			if (evt.getDeviceID().equals(dvId)){
+  	  			int k = i + 1;
+  	  			tmps = 0;
+  	   			if (k < pList.size()){
+  	       			Events evtnxt = (Events) pList.get(k);
+  	       			if (evtnxt.getDeviceID().equals(dvId)){
+	  	       			double diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
+	  	       			tmps = (int) diff / 1000;
+  	       			}   	       			
+  	   			}
+  				if (nbpath==0) {
+  					pathinfos = "Array(";
+  					dateEVbegin = new SimpleDateFormat("yyyMMddHHmmss").format(evt.getDateEvt());
+  					datem = new SimpleDateFormat("yyyyMMddHHmmss").format(evt.getDateEvt());
+  					indexbegin = i;
+  				} else {
+  					datem = new SimpleDateFormat("HHmmss").format(evt.getDateEvt());
+  					pathinfos = pathinfos + ", ";
+  				}
+  				pathinfos = pathinfos + "Array("+evt.getLatitude()+", " + evt.getLongitude() +", " + datem +", " + tmps + ", "+ (int) evt.getSpeed()+")";
+  				nbpath++;
+  				dateEVend = new SimpleDateFormat("yyyMMddHHmmss").format(evt.getDateEvt());
+  				indexend = i;
+  			}
+  		}
+  		Events evt = (Events) pList.get(indexbegin);
+  		Events evtnxt = (Events) pList.get(indexend);
+  		int distance = (int) (evtnxt.getOdometerKM() - evt.getOdometerKM());
+
+        if (nbpath > 1 && distance > 1){
 	        pathinfos = pathinfos + ")";
-            sql = "SELECT accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+accountID+"' and deviceID='"+deviceID+"';";
+            String sql = "SELECT accountID, deviceID, vehicleMake, vehicleModel, licensePlate FROM Device where accountID='"+accountID+"' and deviceID='"+dvId+"';";
             try {
             	 rs = s.executeQuery(sql);
                  if(rs.next())
@@ -560,7 +682,6 @@ public class mainReport {
 	    Double longitudelast = 0.0;
 	    Timestamp dateEVlast = null;
 	    int speed,speedmax = 0,nbevents=0;
-		int nbrarret = 0;
 		int dureepararret = 0;
 		int nbrdepvitesse = 0;
 		int dureedepvitesse = 0;
@@ -584,23 +705,6 @@ public class mainReport {
 	 		            }else eventsInfos = eventsInfos + ", ";
 	 			        eventsInfos = eventsInfos + "Array("+evt.getLatitude()+", " + evt.getLongitude() +", " + new SimpleDateFormat("yyyyMMddHHmmss").format(evt.getDateEvt()) +", " + new SimpleDateFormat("HHmmss").format(evt.getDateEvt()) +",\"\", \"Vitesse maximale\", " + evt.getSpeed() +", -2"+")";
 	 			        nbevents++;	 		            	
-	 	            }
-	 	            if (evt.getSpeed() < 1 ){ // Vérification nombre d'arrêt
-		       			long diff = 0L;
-		       			int dureeTH = 0;
-		       			int k = i + 1;
-		       			if (k < pList.size()){
-		           			Events evtnxt = (Events) pList.get(k);
-		           			diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
-		    	            dureeTH = (int) diff / 1000;
-		       			}
-		       			if (dureeTH > 10) nbrarret ++; 
-	 		            /*if (nbevents == 0) {
-	 		            	eventsInfos = "Array(";
-	 		            }else eventsInfos = eventsInfos + ", ";
-	 		            eventsInfos = eventsInfos + "Array("+evt.getLatitude()+", " + evt.getLongitude() +", " + new SimpleDateFormat("yyyyMMddHHmmss").format(evt.getDateEvt()) +", " + new SimpleDateFormat("HHmmss").format(evt.getDateEvt()) +",\"\", \"Arrêt\", " + evt.getSpeed() +", 0"+")";
-	 			        nbevents++;*/	 		            	
-	 	            	nbrarret ++;
 	 	            }
  	            }
 	        }
@@ -641,6 +745,83 @@ public class mainReport {
 		return eventsInfos;
 	}
 
+	public static String createsecuInfos(String dvId, int irang, LinkedList pList){
+		String secuInfos = "";
+		int nbrarret = 0;
+		int nbinfo = 0;
+		int nbrdepvitesse = 0;
+		
+        for (int i=0; i < pList.size() ; i++){
+   			Events evt = (Events) pList.get(i);
+   			if (evt.getDeviceID().equalsIgnoreCase(dvId)){   
+ 	            if (evt.getSpeed() < 1 ){ // Vérification nombre d'arrêt
+	       			/*long diff = 0L;
+	       			int dureeTH = 0;
+	       			int k = i + 1;
+	       			if (k < pList.size()){
+	           			Events evtnxt = (Events) pList.get(k);
+	           			if (evtnxt.getDeviceID().equalsIgnoreCase(dvId)){   
+		           			diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
+		    	            dureeTH = (int) diff / 1000;
+	           			}
+	       			}
+	       			if (dureeTH > 10) {
+	       				nbrarret ++;
+	       				nbinfo ++;
+	       			}*/
+       				nbrarret ++;
+       				nbinfo ++;
+ 	            }   				
+ 	            if (evt.getSpeed() > evt.getSpeedMax()){ // Vérification vitesse maximum
+ 	            	nbrdepvitesse ++; 	
+ 	            	nbinfo ++;
+ 	            }
+   			}
+        }
+        if (nbinfo > 0){
+        	nbrarret = nbrarret - 2; //On enlève le point de départ et d'arrivé
+        	if (nbrarret <1 ) nbrarret = 0;
+        	secuInfos = secuInfos + "<div id=\"secu"+irang+"\" class=\"secuInfos\"><img id=\"imgEvent"+irang+"\" class=\"siCatIcon\"/><label class=\"siLabel\">Ev&egrave;nements";
+        	secuInfos = secuInfos + "</label><hr /><br /><table><tr><td><table class=\"alignToChart tableSecuInfos\"><tr><td class=\"tsiLabel\">Nombre total d'arr&ecirc; ts</td>";
+        	secuInfos = secuInfos + "<td class=\"tsiData\">"+nbrarret+"</td></tr>"
+        			+ "<tr><td class=\"tsiLabel\">Nombre d'arr&ecirc; ts non-autoris&eacute;s</td><td class=\"tsiData\">0</td></tr></table>"
+        			+ "</td><td><img id=\"secTabImgLegendStopOK"+irang+"\" class=\"secTabLegendImgAlt\"></td></tr></table><br /><table><tr><td>";
+        	secuInfos = secuInfos + "<table class=\"alignToChart tableSecuInfos\"><tr>"
+        			+ "<td class=\"tsiLabel\">Nombre total de d&eacute;passements de vitesse</td><td class=\"tsiData\">"+nbrdepvitesse+"</td></tr>"
+        			+ "<tr><td class=\"tsiLabel\">Dur&eacute;e totale en d&eacute;passement de vitesse</td><td class=\"tsiData\">00:00:00</td></tr><tr><td class=\"tsiLabel\">D&eacute;passements de vitesse / dur&eacute;e de roulage</td><td class=\"tsiData\">0.0%</td></tr></table></td><td>";
+        	secuInfos = secuInfos + "<img id=\"secTabImgLegendSpeed"+irang+"\" class=\"secTabLegendImg\"></td></tr></table><br /><table><tr><td>"
+        			+ "<table class=\"alignToChart tableSecuInfos\"><tr><td class=\"tsiLabel\">Nombre d'acc&eacute;l&eacute;rations hors-norme</td>"
+        			+ "<td class=\"tsiData\">0</td></tr><tr><td class=\"tsiLabel\">Dur&eacute;e en acc&eacute;l&eacute;ration hors-norme</td><td class=\"tsiData\">00:00:00</td></tr>"
+        			+ "<tr><td class=\"tsiLabel\">Acc&eacute;l&eacute;rations hors-norme / dur&eacute;e de roulage</td><td class=\"tsiData\">0.0%</td></tr></table></td><td><img id=\"secTabImgAccAlarm"+irang+"\" class=\"secTabLegendImg\"></td></tr></table><br />";
+        	secuInfos = secuInfos + "<table><tr><td><table class=\"alignToChart tableSecuInfos\"><tr><td class=\"tsiLabel\">Nombre de d&eacute;c&eacute;l&eacute;rations hors-norme</td><td class=\"tsiData\">0</td>"
+        			+ "</tr><tr><td class=\"tsiLabel\">Dur&eacute;e en d&eacute;c&eacute;l&eacute;ration hors-norme</td><td class=\"tsiData\">00:00:00</td></tr><tr><td class=\"tsiLabel\">D&eacute;c&eacute;l&eacute;rations hors-norme / dur&eacute;e de roulage"
+        			+ "</td><td class=\"tsiData\">0.0%</td></tr></table></td><td><img id=\"secTabImgDecAlarm"+irang+"\" class=\"secTabLegendImg\"></td></tr></table><br /><br />";
+        	secuInfos = secuInfos + "<img id=\"imgChart"+irang+"\" class=\"siCatIcon\"/><label class=\"siLabel\">Vitesse</label><hr /><br />"
+        			+ "<div class=\"alignToChart\">S&eacute;lectionnez une zone du graphe avec la souris pour zoomer. Double-cliquez pour revenir au niveau de zoom initial."
+        			+ "<br/>Passez la souris sur la graphe pour afficher le d&eacute;tail d'un point.</div><br/><div><div id=\"speedChart"+irang+"\" class=\"speedChart\"></div></div><br/><br/></div>";
+        }
+		return secuInfos;
+	}
+
+
+	public static double tempsDep(double tms1,double tmsap,double tmsav, int vit1, int vitap, int vitav, int vitmax) 
+	{
+		double tmps=0;
+		
+		double dtms = tmsap - tms1;
+		double dvit = Math.abs(vit1 - vitap);
+		double dtmsA = tms1 - tmsav;
+		double dvitA = Math.abs(vit1 - vitav);
+		
+		double kms = dvit/dtms;		
+		double kmsA = dvitA/dtmsA;		
+		tmps = (vit1 - vitmax)/kms + (vit1 - vitmax)/kmsA;
+
+		System.out.println("dtms:" +dtms + " dvit:"+ dvit+" dtmsA:" +dtmsA + " dvitA:"+ dvitA);
+		
+	    return tmps;
+	};
+
 	private static String getDurationString(int seconds) {
 
 	    int hours = seconds / 3600;
@@ -663,59 +844,6 @@ public class mainReport {
 	    return String.valueOf(number);
 	}
 	
-	public static void calculTemp(Connection c, Statement s){
-		int tmp = 0;
-		boolean flag;
-		long diff = 0L;
-		int tmpidlast = 0;
-		String deviceIDlast = null;
-		Timestamp dateEVlast = null;
-		
-        String sql = "SELECT tmpid, accountID, deviceID, dateEvt FROM datatmpEvt order by deviceID, dateEvt;";
-        try {
-	        ResultSet rs = s.executeQuery(sql);
-	        for(flag = rs.next(); flag; flag = rs.next())
-	        {
-                int tmpid = rs.getObject("tmpid") != null ? rs.getInt("tmpid") : null;
-				String deviceID = rs.getObject("deviceID") != null ? rs.getString("deviceID") : null;
-				Timestamp dateEV = rs.getTimestamp("dateEvt");
-				if (deviceIDlast != null){
-					if (deviceIDlast.equalsIgnoreCase(deviceID)){
-						diff = dateEV.getTime() - dateEVlast.getTime() ;
-					}else{
-						diff = 0;
-					}
-					tmp = (int) diff / 1000;
-					//System.out.println("Temps: "+ tmp);
-					String sentence = "UPDATE datatmpEvt SET tmps = ?,dateEvt = ? WHERE tmpid = ?";
-	                PreparedStatement pstmt = c.prepareStatement(sentence);
-	                pstmt.setInt(1, tmp);
-	                pstmt.setTimestamp(2, dateEVlast);
-	                pstmt.setInt(3, tmpidlast);
-	                pstmt.executeUpdate();
-				} 
-                tmpidlast = tmpid;
-                deviceIDlast = deviceID;
-                dateEVlast = dateEV;
-			}
-	        if (deviceIDlast != null){
-	        	long unixTimestamp = Instant.now().getEpochSecond();
-	        	diff = unixTimestamp - dateEVlast.getTime();
-	        	tmp = (int) diff / 1000;
-	        	//System.out.println("Temps: "+ tmp);
-	        	String sentence = "UPDATE datatmpEvt SET tmps = ?,dateEvt = ? WHERE tmpid = ?";
-                PreparedStatement pstmt = c.prepareStatement(sentence);
-                pstmt.setInt(1, tmp);
-                pstmt.setTimestamp(2, dateEVlast);
-                pstmt.setInt(3, tmpidlast);
-                pstmt.executeUpdate();
-	        }	
-	        rs.close();
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
 
 	public static boolean calculProx(double latitude, double longitude, double latitudelast, double longitudelast){
 		boolean proxim = false;
@@ -784,7 +912,17 @@ public class mainReport {
 	                //vitesselast = 0.;
 	                odometerKMlast = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 	                odometerOffsetKMlast = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
+	                int statusCode = rs.getObject("statusCode") != null ? rs.getInt("statusCode") : null;
 	                statuslast = true;
+                	int speedLimit = 0;
+                	for(int id=0 ;id < nbrDevice;id++){
+                		if (devIDlast.equalsIgnoreCase(deviceID[id])){
+                			speedLimit = Integer.parseInt(deviceSpeedLimit[id]);
+                			id = nbrDevice;
+                		} else speedLimit = 0;
+                			
+                	}
+                   eventsList.add(new Events(acIDlast, devIDlast, latitudelast, longitudelast, vitesselast, dateEVlast, odometerKMlast, odometerOffsetKMlast, statusCode, speedLimit));
 	            	
 			        for(flag = rs.next(); flag; flag = rs.next())
 		            {
@@ -796,9 +934,23 @@ public class mainReport {
 		                double vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
 		                double odometerKM = rs.getObject("odometerKM") != null ? rs.getDouble("odometerKM") : null;
 		                double odometerOffsetKM = rs.getObject("odometerOffsetKM") != null ? rs.getDouble("odometerOffsetKM") : null;
-		                int statusCode = rs.getObject("statusCode") != null ? rs.getInt("statusCode") : null;
+		                statusCode = rs.getObject("statusCode") != null ? rs.getInt("statusCode") : null;
 		                //System.out.println(acID + " " + devID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + latitude + " "+ longitude + " " + vitesse);
 		                //proximite = calculProx(latitude, longitude, latitudelast, longitudelast);
+	                	for(int id=0 ;id < nbrDevice;id++){
+	                		if (devIDlast.equalsIgnoreCase(deviceID[id])){
+	                			speedLimit = Integer.parseInt(deviceSpeedLimit[id]);
+	                			id = nbrDevice;
+	                		} else speedLimit = 0;
+	                			
+	                	}
+	                	if (devIDlast.equalsIgnoreCase(devID)){
+		                	if (vitesse == 0.0 && vitesselast == 0.0){
+		                	} else 
+		                		eventsList.add(new Events(acID, devID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
+	                	} else 
+	                		eventsList.add(new Events(acID, devID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
+	                    
 		                if (devIDlast.equalsIgnoreCase(devID) && vitesse < 1 && vitesselast < 1) {
 		                	topwrite = false;
 		                }
@@ -820,7 +972,6 @@ public class mainReport {
 			                		duree = 0;
 			                		//vitesselast = 0;
 			                	}
-			                	int speedLimit = 0;
 			                	for(int id=0 ;id < nbrDevice;id++){
 			                		if (devIDlast.equalsIgnoreCase(deviceID[id])){
 			                			speedLimit = Integer.parseInt(deviceSpeedLimit[id]);
@@ -858,7 +1009,6 @@ public class mainReport {
 		                }
 		            }
 	                if (topwrite){
-	                	int speedLimit = 0;
 	                	for(int id=0 ;id < nbrDevice;id++){
 	                		if (devIDlast.equalsIgnoreCase(deviceID[id])){
 	                			speedLimit = Integer.parseInt(deviceSpeedLimit[id]);
@@ -889,7 +1039,13 @@ public class mainReport {
             rs1.close();
             rs.close();
 
-            sql = "SELECT tmpid, accountID, deviceID, dateEvt, lat, lon, speed, tmps, first, odometerKM, odometerOffsetKM, statusCode, deviceSpeedLimit FROM datatmpEvt order by deviceID, dateEvt;";
+    		for (int j = 0; j < eventsList.size(); j++) {
+    			Events evt = (Events) eventsList.get(j);
+                System.out.println(evt.getAccountID() + " " + evt.getDeviceID() + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()) + " " + dec.format(evt.getLatitude()) + " "+ dec.format(evt.getLongitude()) + " " + evt.getSpeed() + " " + evt.getOdometerKM() + " " + evt.getSpeedMax() + " "+evt.getStatusCode());
+    			
+    		}
+
+            /*sql = "SELECT tmpid, accountID, deviceID, dateEvt, lat, lon, speed, tmps, first, odometerKM, odometerOffsetKM, statusCode, deviceSpeedLimit FROM datatmpEvt order by deviceID, dateEvt;";
     	    rs = s.executeQuery(sql);
     	    for(flag = rs.next(); flag; flag = rs.next())
     	        {
@@ -907,22 +1063,74 @@ public class mainReport {
                     int statusCode = rs.getObject("statusCode") != null ? rs.getInt("statusCode") : null;
                     int speedLimit = rs.getObject("deviceSpeedLimit") != null ? rs.getInt("deviceSpeedLimit") : null;
                   
-	                eventsList.add(new Events(accountID, deviceID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
 	                
+                    //if (deviceID.equalsIgnoreCase("telo1"))
 	                System.out.println(accountID + " " + deviceID + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV) + " " + dec.format(latitude) + " "+ dec.format(longitude) + " " + vitesse + " " + tmps + " " + first + " "+odometerKM + " "+odometerOffsetKM + " "+speedLimit);
-    	        }
+    	        }*/
         } catch (SQLException e) {
             e.printStackTrace();
-        } /*finally {
-            try {
-                s.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }*/
+        } 
+        
         System.out.println("Chargement de la table terminé. Nb="+nbevt);
         return eventsList;
     }	
+	
+	public static LinkedList addpoints(String acId, String dvId, LinkedList pList){
+		String secuInfos = "";
+		int nbrarret = 0;
+		int nbrpoints = 0;
+		double distance;
+		int startIndex = 0;
+		int startIndexEnd = 0;
+		
+        LinkedList<Events> pListnw = new LinkedList<Events>();	
+		Events evtnxt = null;
+        for (int i=0; i < pList.size() ; i++){
+   			Events evt = (Events) pList.get(i);
+   			if (evt.getDeviceID().equalsIgnoreCase(dvId)){   
+     			 String request = "";
+     			 int k = i + 2;
+     			 if (k >= pList.size()) k = pList.size();
+     			 for (int j = i; j < k; j++) {
+     				 evtnxt = (Events) pList.get(j);
+     				 if (evtnxt.getDeviceID().equals(dvId)){           				  
+     					 request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude();         			
+         				 nbrpoints++;
+         				 startIndexEnd = j;
+     				 }
+     			 }
+     			 if (nbrpoints > 1){
+	     			 request = "http://77.72.92.132:5000/viaroute?" + request+"&instructions=false&alt=false";
+	     			 ArrayList<Location> polyline = sendGetLoc(request, "viaroute");
+	     			 //distance = Double.parseDouble(rep[0])/1000.0;
+	     			 
+	     			 if (polyline != null){
+	     				double tempsnv = (evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime())/polyline.size();
+	     				double temps = ((evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime())/1000.0)/3600;
+	     				//System.out.println("Nombre de point nv:" + polyline.size()+ " tmps a ajouter = "+ tempsnv);
+	    				for (int ip = 0; ip < polyline.size(); ip++) {
+	    					double tmps = evt.getDateEvt().getTime() + (tempsnv*(ip+1));
+	    					int dist = Integer.parseInt(((Location) polyline.get(ip)).getDistance())/1000; 
+		     				double vitessenv = dist / temps;
+		     				double lat = ((Location) polyline.get(ip)).getLatitude();
+		     				double lon = ((Location) polyline.get(ip)).getLongitude();
+		     				Timestamp tm = new Timestamp((long) (evt.getDateEvt().getTime()+(tempsnv*(ip+1))));
+		     				//System.out.println("ip:" + ip+ "tmps = "+ tmps + " vitessenv: "+vitessenv);
+	    				    //System.out.println("donnée à l'indice " + ip + " = " +lat+ "," +lon+", "+tm.getTime()+" vit: "+vitessenv);
+	    				    pListnw.add(new Events(acId, dvId, lat, lon, vitessenv, tm , 0.0, 0.0, -1, 60));	
+	    				    if (startIndex < 1) startIndex = i;
+	    				}
+	     			 }
+     			 }
+     			 request = "";
+     			 nbrpoints = 0;
+     			 i = k - 1;
+   			}
+        }
+        //pList.addAll(startIndex, pListnw);
+        return pListnw;
+	}
+
 	
 	// HTTP GET request
 	@SuppressWarnings("deprecation")
@@ -930,6 +1138,9 @@ public class mainReport {
 		String genreJson;
 		String distance = "0";
 		
+		//rep = new String[2];
+		JSONParser parser = new JSONParser();
+		ArrayList polyline = new ArrayList();
 		try {
 			JSONArray genreArray = null;
 			if (type.equalsIgnoreCase("match")){
@@ -949,12 +1160,13 @@ public class mainReport {
 			        JSONObject routesummary = (JSONObject) firstGenre.get("route_summary");
 			        distance = routesummary.get("total_distance").toString();
 				}
+				//rep[0] = distance;
 			}
 			else {
 				//url = "http://77.72.92.132:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
 				genreJson = IOUtils.toString(new URL(url));
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
-				
+									
 				JSONObject firstGenre = (JSONObject) genreJsonObject.get("route_summary");
 				//System.out.println(firstGenre.get("total_distance").toString());
 				distance = firstGenre.get("total_distance").toString();
@@ -970,5 +1182,100 @@ public class mainReport {
 		}
         return distance;    
 	}		
+
+	// HTTP GET request
+	@SuppressWarnings("deprecation")
+	private static ArrayList<Location> sendGetLoc(String url, String type) {
+		String genreJson;
+		String distance = "0";
+		ArrayList rep;
+		
+		//rep = new String[2];
+		JSONParser parser = new JSONParser();
+		ArrayList polyline = new ArrayList();
+		try {
+			JSONArray genreArray = null;
+			if (type.equalsIgnoreCase("match")){
+				//url = "http://77.72.92.132:5000/match?loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
+				genreJson = IOUtils.toString(new URL(url));
+				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
+
+				genreArray = (JSONArray) genreJsonObject.get("matchings");
+				//System.out.println(genreArray);
+				if (genreArray == null) {
+					System.out.println("JMapData not found in JSON response");
+		            distance = "0";
+		        }
+				else {
+			        // get the first genre
+			        JSONObject firstGenre = (JSONObject) genreArray.get(0);
+			        JSONObject routesummary = (JSONObject) firstGenre.get("route_summary");
+			        distance = routesummary.get("total_distance").toString();
+				}
+				//rep[0] = distance;
+			}
+			else {
+				//url = "http://77.72.92.132:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
+				genreJson = IOUtils.toString(new URL(url));
+				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
+									
+				JSONObject firstGenre = (JSONObject) genreJsonObject.get("route_summary");
+				//System.out.println(firstGenre.get("total_distance").toString());
+				distance = firstGenre.get("total_distance").toString();
+				Object obj = parser.parse(genreJson);
+
+				JSONObject jsonObject = (JSONObject) obj;
+				String route_geometry = (String) jsonObject.get("route_geometry");
+				polyline = decodePoly(route_geometry, distance);
+				// Get size and display.
+				//int count = polyline.size();
+				//System.out.println("Count: " + count);
+				//rep[0] = distance;
+				//rep[1] = polyline.toString();
+			}
+			
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if ((Integer.parseInt(distance)/1000) < DISTANCE_MINI_ENTRE_POINT)
+			return null;
+		else
+			return polyline;    
+	}		
+
+	 public static ArrayList decodePoly(String encoded, String distance) {
+		  ArrayList poly = new ArrayList();
+		  int index = 0, len = encoded.length();
+		  int lat = 0, lng = 0;
+		  while (index < len) {
+		   int b, shift = 0, result = 0;
+		   do {
+		    b = encoded.charAt(index++) - 63;
+		    result |= (b & 0x1f) << shift;
+		    shift += 5;
+		   } while (b >= 0x20);
+		   int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+		   lat += dlat;
+		   shift = 0;
+		   result = 0;
+		   do {
+		    b = encoded.charAt(index++) - 63;
+		    result |= (b & 0x1f) << shift;
+		    shift += 5;
+		   } while (b >= 0x20);
+		   int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+		   lng += dlng;
+		   Location p = new Location((((double) lat / 1E6)),(((double) lng / 1E6)), distance);
+		   poly.add(p);
+		  }
+		  return poly;
+	}
+
+	
 
 }

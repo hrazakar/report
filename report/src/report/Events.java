@@ -3,7 +3,7 @@ package report;
 import java.sql.Timestamp;
 import java.util.*;
 
-public class Events {
+public class Events implements Comparable<Events>{
 
 	  protected String AccountID;
 	  protected String DeviceID ;
@@ -147,5 +147,11 @@ public class Events {
 	  public void setSpeedMax(int SpeedMax) {
 		    this.SpeedMax = SpeedMax;
 		  }
+
+	@Override
+	public int compareTo(Events o) {
+		// TODO Auto-generated method stub
+		return Long.compare(DateEvt.getTime(), o.DateEvt.getTime());
+	}
 
 }
