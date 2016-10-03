@@ -1,7 +1,9 @@
 package report;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.sql.*;
 import java.text.DecimalFormat;
@@ -28,6 +30,8 @@ import org.json.simple.parser.ParseException;
 public class mainReport {
     private static final String VERSION                 = "0.0.1";
 
+    private static final String CONFIG_FILE             = "report.conf";
+    
     private static final boolean SEND_EMAIL = false; 
 
     // ------------------------------------------------------------------------
@@ -43,24 +47,13 @@ public class mainReport {
     private static final String START_DELIM             = KEY_START; // "${";
     private static final String END_DELIM               = KEY_END;   // "}";
     
-    private static final String MAIL_FROM               = "support@araka.mg";
+    private static String MAIL_FROM;
 
     // ------------------------------------------------------------------------
-    private static final String DEFAULT_SUBJECT = 
-        "Device ${device}: [${statuscode}] ${status}";
-    
-    private static final String DEFAULT_BODY    = 
-        "Rule      : ${ruleName}\n" +
-        "Account   : [${accountid}] ${account}\n" +
-        "Device    : [${deviceid}] ${device}\n" +
-        "Date/Time : ${datetime}\n" +
-        "Status    : [${statuscode}] ${status}\n" +
-        "Location  : ${geopoint}\n" +
-        "Address   : ${address}\n" +
-        "Speed     : ${speed}  ${direction}\n" +
-        "Altitude  : ${altitude}\n" +
-
-        "\n";
+    private static String url;
+    private static String user;
+    private static String password;
+    private static String osrm;
 
     // ------------------------------------------------------------------------
 	private static final Logger LOGGER = Logger.getLogger(
@@ -74,7 +67,7 @@ public class mainReport {
     private static final double DISTANCE_MINI_ENTRE_POINT = 0.5D; //Distance en kilomètre
     private static final boolean INTERPOLATION = true; //Distance en kilomètre
 	private static final int ARRET_MAX = 600; //Durée maxi d'arrêt 
-	private static String TEMPLATE_NAME = "../report/template.html";
+	private static String TEMPLATE_NAME;
 	private static int nbrarret = 0;
     private static String iconSpeed = "\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkaDwEyMrRDVAAAAkdJREFUOMttk7FLW2EUxX/fS2oGQdtkEUTESWsxyWCIowEH/4qgQ7uLi4ubiKBBQ8ygtE4O/gEdpIEKgjg3BBu6iA4KCmoeDnn53ndvhwRJ1AMH7nDOucO519CFPsDC+AB8nYXcMIwB3MDlbzjx4Qfwl/fwAfoSsLkOrSdwAuqMaRP0EdwGNOOw3Za/Mo/DzxqIGKMulVIpFFQrFdVKRaVQUJdOqwO9gHACjl9C+oAEbNZAJBptG9+DcyrFooaep3WwcSgBYGB8HVpiTI9ZRHpmEVEVUSmXtQVahGdgikHYegLnUqmuZU6Pjo6s7/vO931ZW1trFQoFa60VtVZdJqMNsINQ8mYhNwCeyecBUFXOzs7c/f09/f393s7OjuTzeS+Xy5n9/X0hGsUsLBCDyDzkvGEYU2MwySQAQRDo6uqqa7Va7vDwMLy7u5ORkZFIMpmM1Go1B2CmpgDMEIx6r+us1+uyuLgYWVpaip2fnxOLxQiCQB8eHlwikXijj97AJaqftFrFzM0xOTnpHRwc2Ovra5menmZmZiayvLwcGmN0ZWUligharQLoLVwxAFuP4Fw6repcT3Hv1tlsqmSz2gD7sVPl5w1oOlApFlW76nsDa1X39jQALYEPpACIw/YFhKHnqZTLbWEYtsNE2nOzqbK3pyHoPwjiUO655gk4roNtgbpMph10eqp6eqqyu6uSzWrQMX+BX0D0zT/FoVSE5wbYJkgTtENpgC2B39n8YjbvPObUIHybh9wQjALcwlUFTh7hO/CnW/wfxr/EZQbGWmEAAAAASUVORK5CYII=\"";;
     private static String iconBegin = "\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAeCAYAAABE4bxTAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkaDh8W2zTybQAAANZJREFUWMPt1jFKA0EUBuBvk1QWgsFWEEkv6wW8SO4SDyAeIQfwCpb2jp1o6gRiEZEUCgmJRUbYQi3MLhF8D6aZ4s3HMO9niKpU0pa0q1utHSD2JZeSFyyxlIwkp1DUdMw1Jni2duXeEwa4xR7O0UcP3W+7lIpOTaBOXp/Xf4Thbxq1/tqzClCA6piOXdQCD5jm6DnOkdAAqPAumeGgknMrvGbEhdLNF4F51uQNHebeJ3jDGCul9Q+heNccaHPwAo8xZQEKUIACFKAABeifgGb5RzjfttEHRRIpVrvw4n4AAAAASUVORK5CYII=\"";
@@ -115,7 +108,6 @@ public class mainReport {
 	    boolean flag = false;
 	    boolean sendmail = false;
 
-
 	    String accountID;
 	    
 	    String pathInfos = "";
@@ -138,7 +130,6 @@ public class mainReport {
 
 	    LinkedList<Events> pointsList;
 	    LinkedList<Events> pointsListnw;
-		File htmlTemplateFile = new File(TEMPLATE_NAME);
 		
 	    if (args.length == 0)
 	    	accountID = "telo";
@@ -146,6 +137,8 @@ public class mainReport {
 	    	accountID = args[0];
 
 		//File htmlTemplateFile = new File("d:\\template-V0.html");
+	    readConfig(CONFIG_FILE);
+		File htmlTemplateFile = new File(TEMPLATE_NAME);
 		String htmlString;
 		htmlString = FileUtils.readFileToString(htmlTemplateFile);
 	    try {
@@ -406,7 +399,7 @@ public class mainReport {
 		}
 		request = request + "loc=" + dec.format(evtlast.getLatitude()) + "," + dec.format(evtlast.getLongitude());
 		if (nbreq > 1) {
-			request = "http://77.72.92.132:5000/viaroute?" + request + "&instructions=false&alt=false";
+			request = osrm + request + "&instructions=false&alt=false";
 			String rep = sendGet(request, "viaroute");
 			double distcalc = Double.parseDouble(rep) / 1000.0;
 			distance = distcalc;
@@ -459,7 +452,7 @@ public class mainReport {
 					}
 				}
 				if (nbreq > 1) {
-					request = "http://77.72.92.132:5000/viaroute?" + request + "&instructions=false&alt=false";
+					request = osrm + request + "&instructions=false&alt=false";
 					String rep = sendGet(request, "viaroute");
 					double distcalc = Double.parseDouble(rep) / 1000.0;
 					if (distcalc < 100.)
@@ -550,6 +543,7 @@ public class mainReport {
 	    int tmps, nbstop = 0;
 	    int nb =0, nblecture = 0;
 	    int indexlast = 0;
+	    double speedlast = 0;
 	    boolean havenext = false;
 
 		formatSymbols.setDecimalSeparator('.');
@@ -569,26 +563,32 @@ public class mainReport {
             if (i==0){ 
             	stopsInfos = "Array(" + dec.format(evt.getLatitude())+", "+ dec.format(evt.getLongitude())+", "+new SimpleDateFormat("yyyyMMddHHmmss").format(evt.getDateEvt())+", \"\", null, "+evt.getSpeed()+")";
             	accountID = evt.getAccountID();
+            	speedlast = evt.getSpeed();
+	            indexlast = i;
 	            nbstop++;
             }
             else{
             	if (evt.getSpeed() < 1.){
 	            	tmps = getDuration(pListemp, dvId, i);
-	            	if (tmps > ARRET_MAX){
-		            	temps = "\"00-00-00 "+getDurationString(tmps)+"\"";
-		            	Calendar cal = Calendar.getInstance();
-		                cal.setTimeInMillis(evt.getDateEvt().getTime());
-		                cal.add(Calendar.SECOND, tmps);
-		                timestamp = new Timestamp(cal.getTime().getTime());
-		                temps2 = new SimpleDateFormat("HHmmss").format(timestamp); 
-		                datem = new SimpleDateFormat("HHmmss").format(evt.getDateEvt());			                
-		  	  			
-		  	   			stopsInfos = stopsInfos + ", Array("+ dec.format(evt.getLatitude())+", "+ dec.format(evt.getLongitude())+", " + datem +", "+temps+", " + temps2 + ", "+ evt.getSpeed()+")";
-		  	   			indexlast = i;
-		  	   			nbstop++;
-		  	   			nbrarret++;
+	            	if (i == (indexlast + 1) && speedlast < 1){
+	            	} else {
+	            		if (tmps > ARRET_MAX){
+			            	temps = "\"00-00-00 "+getDurationString(tmps)+"\"";
+			            	Calendar cal = Calendar.getInstance();
+			                cal.setTimeInMillis(evt.getDateEvt().getTime());
+			                cal.add(Calendar.SECOND, tmps);
+			                timestamp = new Timestamp(cal.getTime().getTime());
+			                temps2 = new SimpleDateFormat("HHmmss").format(timestamp); 
+			                datem = new SimpleDateFormat("HHmmss").format(evt.getDateEvt());			                
+			  	  			
+			  	   			stopsInfos = stopsInfos + ", Array("+ dec.format(evt.getLatitude())+", "+ dec.format(evt.getLongitude())+", " + datem +", "+temps+", " + temps2 + ", "+ evt.getSpeed()+")";
+			  	   			nbstop++;
+			  	   			nbrarret++;
+	            		}
 	            	}
             	}
+        		indexlast = i;
+        		speedlast = evt.getSpeed();
             }
 		}
 		if (pListemp.size() > 2 && indexlast!=(pListemp.size()-1)){
@@ -624,7 +624,7 @@ public class mainReport {
 	        //System.out.println(stopsInfos);
         }else{
 	        stopsInfos = null;
-	        System.out.println(deviceIDlast +": AUCUN stopsInfos");
+	        System.out.println(deviceIDlast +" AUCUN stopsInfos");
         }
 		return stopsInfos;
 	}
@@ -657,7 +657,7 @@ public class mainReport {
 	             rs1.close();
            }
            rs.close();
-	       System.out.println(dvId +": stopsInfosnull");
+	       System.out.println(dvId +" stopsInfosnull");
 	       //System.out.println(stopsInfos);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -740,7 +740,7 @@ public class mainReport {
 	        System.out.println(pathinfos);
         }else{
 	        pathinfos = null;
-	        System.out.println(deviceIDlast +": AUCUN pathInfos");       	
+	        System.out.println(deviceIDlast +" AUCUN pathInfos");       	
         }
 		return pathinfos;
 	}
@@ -816,11 +816,11 @@ public class mainReport {
     			// TODO Auto-generated catch block
     			e.printStackTrace();
     		}
-	        System.out.println(deviceIDlast +": eventsInfos");
+	        System.out.println(deviceIDlast +" eventsInfos");
 	        //System.out.println(eventsInfos);
         }else {
         	eventsInfos=null;
-        	System.out.println(deviceIDlast +": AUCUN eventsInfos");
+        	System.out.println(deviceIDlast +" AUCUN eventsInfos");
         }
 		return eventsInfos;
 	}
@@ -1248,7 +1248,7 @@ public class mainReport {
      				 }
      			 }
      			 if (nbrpoints > 1){
-	     			 request = "http://77.72.92.132:5000/viaroute?" + request+"&instructions=false&alt=false";
+	     			 request = osrm + request+"&instructions=false&alt=false";
 	     			 ArrayList<Location> polyline = sendGetLoc(request, "viaroute");
 	     			 //distance = Double.parseDouble(rep[0])/1000.0;
 	     			 
@@ -1290,14 +1290,14 @@ public class mainReport {
    			if (evt.getDeviceID().equalsIgnoreCase(dvId)){   
    				String request = "";
 				request = "loc=" + evt.getLatitude() + "," + evt.getLongitude()+"loc=" + lat + "," + lon;         			
-    			request = "http://77.72.92.132:5000/viaroute?" + request+"&instructions=false&alt=false";
-    			System.out.println(":" +request);
+    			request = osrm + request+"&instructions=false&alt=false";
+    			//System.out.println(":" +request);
     			ArrayList<Location> polyline = sendGetLoc(request, "viaroute");
     			if (polyline != null){
     				double tempsnv = (dateEV.getTime() - evt.getDateEvt().getTime())/polyline.size();
-    				System.out.println("dateEV:"+new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV)+" evt.getDateEvt():"+new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()));
+    				//System.out.println("dateEV:"+new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(dateEV)+" evt.getDateEvt():"+new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()));
     				double temps = ((dateEV.getTime() - evt.getDateEvt().getTime())/1000.0)/3600;
-    				System.out.println("Nombre de point nv:" + polyline.size()+ " tmps a ajouter = "+ tempsnv+ " dif:"+temps);
+    				//System.out.println("Nombre de point nv:" + polyline.size()+ " tmps a ajouter = "+ tempsnv+ " dif:"+temps);
 	   				for (int ip = 0; ip < polyline.size(); ip++) {
 	   					double tmps = evt.getDateEvt().getTime() + (tempsnv*(ip+1));
 	   					int dist = Integer.parseInt(((Location) polyline.get(ip)).getDistance())/1000; 
@@ -1335,7 +1335,7 @@ public class mainReport {
 		try {
 			JSONArray genreArray = null;
 			if (type.equalsIgnoreCase("match")){
-				//url = "http://77.72.92.132:5000/match?loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
+				//url = osrm+"loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
 				genreJson = IOUtils.toString(new URL(url));
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
 
@@ -1354,12 +1354,12 @@ public class mainReport {
 				//rep[0] = distance;
 			}
 			else {
-				//url = "http://77.72.92.132:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
+				//url = osrm+"loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
 				genreJson = IOUtils.toString(new URL(url));
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
 									
 				JSONObject firstGenre = (JSONObject) genreJsonObject.get("route_summary");
-				System.out.println(firstGenre.get("total_distance").toString());
+				//System.out.println(firstGenre.get("total_distance").toString());
 				distance = firstGenre.get("total_distance").toString();
 			}
 			
@@ -1387,7 +1387,7 @@ public class mainReport {
 		try {
 			JSONArray genreArray = null;
 			if (type.equalsIgnoreCase("match")){
-				//url = "http://77.72.92.132:5000/match?loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
+				//url = "http://192.168.0.12:5000/match?loc="+lat1+","+lon1+"&t="+tms1+"loc="+lat2+","+lon2+"&t="+tms2+"&compression=true";
 				genreJson = IOUtils.toString(new URL(url));
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
 
@@ -1406,7 +1406,7 @@ public class mainReport {
 				//rep[0] = distance;
 			}
 			else {
-				//url = "http://77.72.92.132:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
+				//url = "http://192.168.0.1:5000/viaroute?loc="+lat1+","+lon1+"&loc="+lat2+","+lon2+"&instructions=false&alt=false";
 				genreJson = IOUtils.toString(new URL(url));
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
 									
@@ -1469,5 +1469,41 @@ public class mainReport {
 
 	    // ------------------------------------------------------------------------
 	
+	private static void readConfig(String file) {
+		Properties prop = new Properties();
+		InputStream input = null;
 
+		try {
+
+			input = new FileInputStream(file);
+
+			// load a properties file
+			prop.load(input);
+
+			// get the property value and print it out
+			url = prop.getProperty("url");
+			user = prop.getProperty("dbuser");
+			password = prop.getProperty("dbpassword");
+			osrm = prop.getProperty("osrm");
+			MAIL_FROM = prop.getProperty("mailfrom");
+			TEMPLATE_NAME = prop.getProperty("template");
+			System.out.println(url);
+			System.out.println(user);
+			System.out.println(password);
+			System.out.println(osrm);
+			System.out.println(MAIL_FROM);
+			System.out.println(TEMPLATE_NAME);
+
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		} finally {
+			if (input != null) {
+				try {
+					input.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}		
+	}
 }
