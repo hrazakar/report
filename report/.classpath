@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry exported="true" kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
+	<classpathentry kind="lib" path="D:/commons-io-2.5-bin/commons-io-2.5/commons-io-2.5.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/dsn.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/imap.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/mail.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/mailapi.jar"/>
+	<classpathentry exported="true" kind="lib" path="I:/Workspace/report/lib/mm_mysql-2_0_4-bin.jar"/>
+	<classpathentry exported="true" kind="lib" path="I:/Workspace/report/lib/mysql.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/pop3.jar"/>
+	<classpathentry kind="lib" path="I:/Workspace/report/lib/smtp.jar"/>
+	<classpathentry exported="true" kind="lib" path="C:/Users/Hery/reportGit/report/lib/json-simple-1.1.1.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Hery/reportGit/report/lib/commons-io-2.5.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

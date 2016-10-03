@@ -13,6 +13,8 @@ import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.mail.internet.InternetAddress;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.json.simple.JSONArray;
@@ -22,16 +24,58 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 
+
 public class mainReport {
+    private static final String VERSION                 = "0.0.1";
+
+    private static final boolean SEND_EMAIL = false; 
+
+    // ------------------------------------------------------------------------
+    // Replace keys found in target String with their corresponding values
+    // Key format: ${key[:arg]}
+
+    public  static final char   KEY_START_ESC           = '\\';
+    public  static final String KEY_START               = "${";
+    public  static final String KEY_END                 = "}";
+    public  static final String DFT_DELIM               = "=";
+    public  static final String ARG_DELIM               = ":";
+
+    private static final String START_DELIM             = KEY_START; // "${";
+    private static final String END_DELIM               = KEY_END;   // "}";
+    
+    private static final String MAIL_FROM               = "support@araka.mg";
+
+    // ------------------------------------------------------------------------
+    private static final String DEFAULT_SUBJECT = 
+        "Device ${device}: [${statuscode}] ${status}";
+    
+    private static final String DEFAULT_BODY    = 
+        "Rule      : ${ruleName}\n" +
+        "Account   : [${accountid}] ${account}\n" +
+        "Device    : [${deviceid}] ${device}\n" +
+        "Date/Time : ${datetime}\n" +
+        "Status    : [${statuscode}] ${status}\n" +
+        "Location  : ${geopoint}\n" +
+        "Address   : ${address}\n" +
+        "Speed     : ${speed}  ${direction}\n" +
+        "Altitude  : ${altitude}\n" +
+
+        "\n";
+
+    // ------------------------------------------------------------------------
 	private static final Logger LOGGER = Logger.getLogger(
 	Thread.currentThread().getStackTrace()[0].getClassName() );
 	static DecimalFormatSymbols formatSymbols = new DecimalFormatSymbols(Locale.getDefault());
 	private static String[] deviceID;
 	private static String[] deviceSpeedLimit;
 	private static String date_trt;
+
     public  static final char    CSV_SEPARATOR_CHAR             = '|';
     private static final double DISTANCE_MINI_ENTRE_POINT = 0.5D; //Distance en kilomètre
+    private static final boolean INTERPOLATION = true; //Distance en kilomètre
 	private static final int ARRET_MAX = 600; //Durée maxi d'arrêt 
+	private static String TEMPLATE_NAME = "../report/template.html";
+	private static int nbrarret = 0;
     private static String iconSpeed = "\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkaDwEyMrRDVAAAAkdJREFUOMttk7FLW2EUxX/fS2oGQdtkEUTESWsxyWCIowEH/4qgQ7uLi4ubiKBBQ8ygtE4O/gEdpIEKgjg3BBu6iA4KCmoeDnn53ndvhwRJ1AMH7nDOucO519CFPsDC+AB8nYXcMIwB3MDlbzjx4Qfwl/fwAfoSsLkOrSdwAuqMaRP0EdwGNOOw3Za/Mo/DzxqIGKMulVIpFFQrFdVKRaVQUJdOqwO9gHACjl9C+oAEbNZAJBptG9+DcyrFooaep3WwcSgBYGB8HVpiTI9ZRHpmEVEVUSmXtQVahGdgikHYegLnUqmuZU6Pjo6s7/vO931ZW1trFQoFa60VtVZdJqMNsINQ8mYhNwCeyecBUFXOzs7c/f09/f393s7OjuTzeS+Xy5n9/X0hGsUsLBCDyDzkvGEYU2MwySQAQRDo6uqqa7Va7vDwMLy7u5ORkZFIMpmM1Go1B2CmpgDMEIx6r+us1+uyuLgYWVpaip2fnxOLxQiCQB8eHlwikXijj97AJaqftFrFzM0xOTnpHRwc2Ovra5menmZmZiayvLwcGmN0ZWUligharQLoLVwxAFuP4Fw6repcT3Hv1tlsqmSz2gD7sVPl5w1oOlApFlW76nsDa1X39jQALYEPpACIw/YFhKHnqZTLbWEYtsNE2nOzqbK3pyHoPwjiUO655gk4roNtgbpMph10eqp6eqqyu6uSzWrQMX+BX0D0zT/FoVSE5wbYJkgTtENpgC2B39n8YjbvPObUIHybh9wQjALcwlUFTh7hO/CnW/wfxr/EZQbGWmEAAAAASUVORK5CYII=\"";;
     private static String iconBegin = "\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAeCAYAAABE4bxTAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AkaDh8W2zTybQAAANZJREFUWMPt1jFKA0EUBuBvk1QWgsFWEEkv6wW8SO4SDyAeIQfwCpb2jp1o6gRiEZEUCgmJRUbYQi3MLhF8D6aZ4s3HMO9niKpU0pa0q1utHSD2JZeSFyyxlIwkp1DUdMw1Jni2duXeEwa4xR7O0UcP3W+7lIpOTaBOXp/Xf4Thbxq1/tqzClCA6piOXdQCD5jm6DnOkdAAqPAumeGgknMrvGbEhdLNF4F51uQNHebeJ3jDGCul9Q+heNccaHPwAo8xZQEKUIACFKAABeifgGb5RzjfttEHRRIpVrvw4n4AAAAASUVORK5CYII=\"";
     //private static String iconEnd = "\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABkAAAAeCAYAAADZ7LXbAAAACXBIWXMAAAsTAAALEwEAmpwYAAA/cmlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNS42LWMwNjcgNzkuMTU3NzQ3LCAyMDE1LzAzLzMwLTIzOjQwOjQyICAgICAgICAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iCiAgICAgICAgICAgIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIKICAgICAgICAgICAgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iCiAgICAgICAgICAgIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiCiAgICAgICAgICAgIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIgogICAgICAgICAgICB4bWxuczpwaG90b3Nob3A9Imh0dHA6Ly9ucy5hZG9iZS5jb20vcGhvdG9zaG9wLzEuMC8iCiAgICAgICAgICAgIHhtbG5zOnRpZmY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vdGlmZi8xLjAvIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDx4bXA6Q3JlYXRlRGF0ZT4yMDEzLTExLTA0VDE1OjI5OjQ5KzAxOjAwPC94bXA6Q3JlYXRlRGF0ZT4KICAgICAgICAgPHhtcDpNZXRhZGF0YURhdGU+MjAxNi0wOS0yNVQyMjoxNTowNSswMjowMDwveG1wOk1ldGFkYXRhRGF0ZT4KICAgICAgICAgPHhtcDpNb2RpZnlEYXRlPjIwMTYtMDktMjVUMjI6MTU6MDUrMDI6MDA8L3htcDpNb2RpZnlEYXRlPgogICAgICAgICA8eG1wOkNyZWF0b3JUb29sPkFkb2JlIFBob3Rvc2hvcCBDQyAyMDE1IChNYWNpbnRvc2gpPC94bXA6Q3JlYXRvclRvb2w+CiAgICAgICAgIDxkYzpmb3JtYXQ+aW1hZ2UvcG5nPC9kYzpmb3JtYXQ+CiAgICAgICAgIDx4bXBNTTpJbnN0YW5jZUlEPnhtcC5paWQ6YzdjMDFlMzMtMTRhNi00ZDhlLTk0MGItZDI0N2I4MjUwYWVlPC94bXBNTTpJbnN0YW5jZUlEPgogICAgICAgICA8eG1wTU06RG9jdW1lbnRJRD5hZG9iZTpkb2NpZDpwaG90b3Nob3A6MTJjMmRmNGMtYzNlYi0xMTc5LTlhZTMtZGQ2NjRlMTBlZWUyPC94bXBNTTpEb2N1bWVudElEPgogICAgICAgICA8eG1wTU06T3JpZ2luYWxEb2N1bWVudElEPnhtcC5kaWQ6MDkxOUE3NjkwOTIwNjgxMTgyMkFFQ0Y5REQ2MzlEM0U8L3htcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD4KICAgICAgICAgPHhtcE1NOkhpc3Rvcnk+CiAgICAgICAgICAgIDxyZGY6U2VxPgogICAgICAgICAgICAgICA8cmRmOmxpIHJkZjpwYXJzZVR5cGU9IlJlc291cmNlIj4KICAgICAgICAgICAgICAgICAgPHN0RXZ0OmFjdGlvbj5zYXZlZDwvc3RFdnQ6YWN0aW9uPgogICAgICAgICAgICAgICAgICA8c3RFdnQ6aW5zdGFuY2VJRD54bXAuaWlkOjA5MTlBNzY5MDkyMDY4MTE4MjJBRUNGOURENjM5RDNFPC9zdEV2dDppbnN0YW5jZUlEPgogICAgICAgICAgICAgICAgICA8c3RFdnQ6d2hlbj4yMDEzLTExLTA0VDE1OjI5OjQ5KzAxOjAwPC9zdEV2dDp3aGVuPgogICAgICAgICAgICAgICAgICA8c3RFdnQ6c29mdHdhcmVBZ2VudD5BZG9iZSBQaG90b3Nob3AgQ1M2IChNYWNpbnRvc2gpPC9zdEV2dDpzb2Z0d2FyZUFnZW50PgogICAgICAgICAgICAgICAgICA8c3RFdnQ6Y2hhbmdlZD4vPC9zdEV2dDpjaGFuZ2VkPgogICAgICAgICAgICAgICA8L3JkZjpsaT4KICAgICAgICAgICAgICAgPHJkZjpsaSByZGY6cGFyc2VUeXBlPSJSZXNvdXJjZSI+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDphY3Rpb24+c2F2ZWQ8L3N0RXZ0OmFjdGlvbj4KICAgICAgICAgICAgICAgICAgPHN0RXZ0Omluc3RhbmNlSUQ+eG1wLmlpZDphNjlkMjQ0Ni1jYjhkLTRjNzEtOTMwMS1jY2EzZmE1MDg3OTg8L3N0RXZ0Omluc3RhbmNlSUQ+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDp3aGVuPjIwMTYtMDktMjVUMjI6MTU6MDUrMDI6MDA8L3N0RXZ0OndoZW4+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDpzb2Z0d2FyZUFnZW50PkFkb2JlIFBob3Rvc2hvcCBDQyAyMDE1IChNYWNpbnRvc2gpPC9zdEV2dDpzb2Z0d2FyZUFnZW50PgogICAgICAgICAgICAgICAgICA8c3RFdnQ6Y2hhbmdlZD4vPC9zdEV2dDpjaGFuZ2VkPgogICAgICAgICAgICAgICA8L3JkZjpsaT4KICAgICAgICAgICAgICAgPHJkZjpsaSByZGY6cGFyc2VUeXBlPSJSZXNvdXJjZSI+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDphY3Rpb24+Y29udmVydGVkPC9zdEV2dDphY3Rpb24+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDpwYXJhbWV0ZXJzPmZyb20gYXBwbGljYXRpb24vdm5kLmFkb2JlLnBob3Rvc2hvcCB0byBpbWFnZS9wbmc8L3N0RXZ0OnBhcmFtZXRlcnM+CiAgICAgICAgICAgICAgIDwvcmRmOmxpPgogICAgICAgICAgICAgICA8cmRmOmxpIHJkZjpwYXJzZVR5cGU9IlJlc291cmNlIj4KICAgICAgICAgICAgICAgICAgPHN0RXZ0OmFjdGlvbj5kZXJpdmVkPC9zdEV2dDphY3Rpb24+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDpwYXJhbWV0ZXJzPmNvbnZlcnRlZCBmcm9tIGFwcGxpY2F0aW9uL3ZuZC5hZG9iZS5waG90b3Nob3AgdG8gaW1hZ2UvcG5nPC9zdEV2dDpwYXJhbWV0ZXJzPgogICAgICAgICAgICAgICA8L3JkZjpsaT4KICAgICAgICAgICAgICAgPHJkZjpsaSByZGY6cGFyc2VUeXBlPSJSZXNvdXJjZSI+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDphY3Rpb24+c2F2ZWQ8L3N0RXZ0OmFjdGlvbj4KICAgICAgICAgICAgICAgICAgPHN0RXZ0Omluc3RhbmNlSUQ+eG1wLmlpZDpjN2MwMWUzMy0xNGE2LTRkOGUtOTQwYi1kMjQ3YjgyNTBhZWU8L3N0RXZ0Omluc3RhbmNlSUQ+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDp3aGVuPjIwMTYtMDktMjVUMjI6MTU6MDUrMDI6MDA8L3N0RXZ0OndoZW4+CiAgICAgICAgICAgICAgICAgIDxzdEV2dDpzb2Z0d2FyZUFnZW50PkFkb2JlIFBob3Rvc2hvcCBDQyAyMDE1IChNYWNpbnRvc2gpPC9zdEV2dDpzb2Z0d2FyZUFnZW50PgogICAgICAgICAgICAgICAgICA8c3RFdnQ6Y2hhbmdlZD4vPC9zdEV2dDpjaGFuZ2VkPgogICAgICAgICAgICAgICA8L3JkZjpsaT4KICAgICAgICAgICAgPC9yZGY6U2VxPgogICAgICAgICA8L3htcE1NOkhpc3Rvcnk+CiAgICAgICAgIDx4bXBNTTpEZXJpdmVkRnJvbSByZGY6cGFyc2VUeXBlPSJSZXNvdXJjZSI+CiAgICAgICAgICAgIDxzdFJlZjppbnN0YW5jZUlEPnhtcC5paWQ6YTY5ZDI0NDYtY2I4ZC00YzcxLTkzMDEtY2NhM2ZhNTA4Nzk4PC9zdFJlZjppbnN0YW5jZUlEPgogICAgICAgICAgICA8c3RSZWY6ZG9jdW1lbnRJRD54bXAuZGlkOjA5MTlBNzY5MDkyMDY4MTE4MjJBRUNGOURENjM5RDNFPC9zdFJlZjpkb2N1bWVudElEPgogICAgICAgICAgICA8c3RSZWY6b3JpZ2luYWxEb2N1bWVudElEPnhtcC5kaWQ6MDkxOUE3NjkwOTIwNjgxMTgyMkFFQ0Y5REQ2MzlEM0U8L3N0UmVmOm9yaWdpbmFsRG9jdW1lbnRJRD4KICAgICAgICAgPC94bXBNTTpEZXJpdmVkRnJvbT4KICAgICAgICAgPHBob3Rvc2hvcDpDb2xvck1vZGU+MzwvcGhvdG9zaG9wOkNvbG9yTW9kZT4KICAgICAgICAgPHRpZmY6T3JpZW50YXRpb24+MTwvdGlmZjpPcmllbnRhdGlvbj4KICAgICAgICAgPHRpZmY6WFJlc29sdXRpb24+NzIwMDAwLzEwMDAwPC90aWZmOlhSZXNvbHV0aW9uPgogICAgICAgICA8dGlmZjpZUmVzb2x1dGlvbj43MjAwMDAvMTAwMDA8L3RpZmY6WVJlc29sdXRpb24+CiAgICAgICAgIDx0aWZmOlJlc29sdXRpb25Vbml0PjI8L3RpZmY6UmVzb2x1dGlvblVuaXQ+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+NjU1MzU8L2V4aWY6Q29sb3JTcGFjZT4KICAgICAgICAgPGV4aWY6UGl4ZWxYRGltZW5zaW9uPjI1PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjMwPC9leGlmOlBpeGVsWURpbWVuc2lvbj4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1ldGE+CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgCjw/eHBhY2tldCBlbmQ9InciPz6mYouoAAAAIGNIUk0AAG2YAABzjgAA2ksAAIThAAB87gAA2AAAADI5AAAdLnSwtFsAAAITSURBVHja7NZPiE9RFAfwz33vzQyaGkqirEkjNv6sxEJSiqUFSklK+VeSsLRQoshKZGNhJSlRpElK1tggJYoZDCY/xm/m3WvhpZ/J+P1+k7Hh1K37ve+e9z3n3HvOPQHLcAz92IOB63mPtWGKEdGfkALnsbDCzzs5OCfkkgSr0DFG5+ZESN404BfX8h6LQ9fKeho9FFjzC537eIqtGG3y/6U4kuFytVBbGzqvrM6mnC5T2TcOASzHJtzDNmS/2DMVh3AL6wu8qj58XBe6MrLNpVGheRSW4Bz24WTDeg8OYHaFBwvkFcjfiZH0OjCjjZD3Vuc6nmQZPxkdTIJk/oL8J/lP8o+QXMTdCXJMbyRJ04VAmJu+45c4XJWNLVhRzc9hpA2SJwEbcQnve0Pe+7CYuUDSPSL2YWgcxXnYWVXh7t8Q7MeFRk+KR6ksT5W120J2NRufAB5jLxbhOL6MGTewAScw2OjJUGVh/6m82+7QjYSo3rxyzhqDB5oe/J7yk5XloJvpKzKdze/HwJjR2u26k+rWlB/sikMGRR2yCb8DTU08E7+YX77zINUVIZcmK0/epuhArIFOoW2iljP+RqrbUX4QQ2i7TLS1/2wc1heHFT/agkmqXdvjJy/SiI6QtRy2tkmepdLRWENo2Z8MXdV8WkN79PuwpWGX4md5KFryJmto7obwvlWPDsea/jSqaCF7vg0AWTWiZFCvq5oAAAAASUVORK5CYII=\"";
@@ -69,9 +113,10 @@ public class mainReport {
 	    ResultSet rs = null;
 	    String sql = null;
 	    boolean flag = false;
+	    boolean sendmail = false;
 
 
-	    String accountID = "telo";
+	    String accountID;
 	    
 	    String pathInfos = "";
 	    String stopsInfos = "";
@@ -86,11 +131,20 @@ public class mainReport {
 		String infoTab = "";
 		//Food & Beverage - Compte-rendu du 08/12/2015
 		String titre_date = "";
+		String mail_to = "";
+	    String MAIL_SUBJECT = "";
+	    String MAIL_MESSAGE = "";
 	    int nbrdevice = 0;
 
 	    LinkedList<Events> pointsList;
 	    LinkedList<Events> pointsListnw;
-		File htmlTemplateFile = new File("../report/src/report/template.html");
+		File htmlTemplateFile = new File(TEMPLATE_NAME);
+		
+	    if (args.length == 0)
+	    	accountID = "telo";
+	    else 
+	    	accountID = args[0];
+
 		//File htmlTemplateFile = new File("d:\\template-V0.html");
 		String htmlString;
 		htmlString = FileUtils.readFileToString(htmlTemplateFile);
@@ -142,6 +196,16 @@ public class mainReport {
         	gMapElts = gMapElts + ")";
         	//System.out.println(gMapElts);
 
+			sql = "SELECT notifyEmail, allowNotify, suspendUntilTime FROM Account WHERE accountID='"+accountID+"';";
+            rs = st.executeQuery(sql);
+            if (rs.next()) {
+            	mail_to = rs.getObject("notifyEmail") != null ? rs.getString("notifyEmail") : null;
+            	int allowNotify = rs.getObject("allowNotify") != null ? rs.getInt("allowNotify") : 0;
+            	int suspendUntilTime = rs.getObject("suspendUntilTime") != null ? rs.getInt("suspendUntilTime") : 0;
+            	if (mail_to != null && allowNotify >0 && suspendUntilTime ==0){
+            		sendmail = true;
+            	}
+            }
 	    } catch (SQLException ex) {
 	        LOGGER.severe(ex.getMessage());
 	    } finally {
@@ -165,7 +229,7 @@ public class mainReport {
 		Calendar cal = Calendar.getInstance();
 		cal.add(Calendar.DATE, -1);
 		Date dateBefore1Days = cal.getTime();
-		//System.out.println(new SimpleDateFormat("dd/MM/yyyy").format(dateBefore1Days));
+		System.out.println(new SimpleDateFormat("dd/MM/yyyy").format(dateBefore1Days));
 		date_trt = new SimpleDateFormat("dd/MM/yyyy").format(dateBefore1Days);
 		String date_SpeedChart = new SimpleDateFormat("yyyy-MM-dd").format(dateBefore1Days);
 		titre_date = accountID + " - Compte-rendu du " + date_trt ;
@@ -191,9 +255,21 @@ public class mainReport {
 		htmlString = htmlString.replace("$GAT_iconDecAlarm", iconDecAlarm);
 		String datefile = new SimpleDateFormat("dd-MM-yyyy").format(dateBefore1Days);
 		filename = accountID + "_COMPTE-RENDU_" + datefile + ".html";
-		File newHtmlFile = new File("d:\\"+filename);
+		File newHtmlFile = new File(filename);
 		FileUtils.writeStringToFile(newHtmlFile, htmlString);
-
+		SendMail mail = new SendMail();
+		try {
+            if (sendmail && SEND_EMAIL){
+            	MAIL_MESSAGE = "Compte: " + accountID +"\n";
+            	MAIL_MESSAGE = MAIL_MESSAGE + "Rapport: Parcours et Sécurité du " + date_trt + " 00:00:00 au "+ date_trt + " 23:59:59" ;
+            	MAIL_SUBJECT = titre_date;
+            	mail.mailovh(MAIL_FROM, mail_to, MAIL_SUBJECT, MAIL_MESSAGE, filename);
+            }
+            	
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	public static String createinfoTab(Connection c, Statement s, String acId, String dvId, int irang,
@@ -282,13 +358,70 @@ public class mainReport {
 		int indpoint = 0;
 		int ipoint = 0;
 		int j=0;
-		
+		String request = "";
+		Events evtlast = null;
+
 		for (int i = 0; i < pList.size(); i++) {
 			Events evt = (Events) pList.get(i);
 			if (evt.getDeviceID().equals(dvId)) {
-				String request = "";
-				if (nb == 0)
+				if (nb == 0){
 					dateEVdeb = evt.getDateEvt();
+					request = request + "loc=" + dec.format(evt.getLatitude()) + "," + dec.format(evt.getLongitude()); // point de départ
+					nbreq++;
+				}
+				if (evt.getSpeed() > 0) {
+					if (i + 1 < pList.size()) {
+						duree = 0;
+						Events evtp = (Events) pList.get(i + 1);
+						if (evtp.getDeviceID().equals(dvId)) 
+							duree = (evtp.getDateEvt().getTime() - evt.getDateEvt().getTime()) / 1000.0;
+					}
+					dureeroulage = (int) (dureeroulage + duree); // Calcul temps de roulage
+					vitessemoy = vitessemoy + (int) evt.getSpeed();
+					nbvitesse++;
+				} else{
+					duree = 0;
+					if (i + 1 < pList.size()) {
+						Events evtp = (Events) pList.get(i + 1);
+						if (evtp.getDeviceID().equals(dvId)) 
+							duree = (evtp.getDateEvt().getTime() - evt.getDateEvt().getTime()) / 1000.0;
+					}
+					dureearret = (int) (dureearret + duree); // Calcul temps d'arrêt
+					request = request + "loc=" + dec.format(evt.getLatitude()) + "," + dec.format(evt.getLongitude()); //pour le calcul de distance, en prend en compte que les arrêts
+					nbreq++;
+				}	
+				if (evt.getSpeed() > speedmax) {
+					speedmax = (int) evt.getSpeed();
+					latitudemax = evt.getLatitude();
+					longitudemax = evt.getLongitude();
+				}
+ 	            if (evt.getSpeed() > evt.getSpeedMax()){ // Vérification vitesse maximum
+ 	            	request = request + "loc=" + dec.format(evt.getLatitude()) + "," + dec.format(evt.getLongitude());
+ 	            	nbreq++;
+ 	            }
+				dateEVlast = evt.getDateEvt();
+				evtlast = evt;
+				nb++;
+			}
+		}
+		request = request + "loc=" + dec.format(evtlast.getLatitude()) + "," + dec.format(evtlast.getLongitude());
+		if (nbreq > 1) {
+			request = "http://77.72.92.132:5000/viaroute?" + request + "&instructions=false&alt=false";
+			String rep = sendGet(request, "viaroute");
+			double distcalc = Double.parseDouble(rep) / 1000.0;
+			distance = distcalc;
+			//System.out.println("Distance: " + distcalc + " total: "+(int) distance + "kms" + " req:"+request);
+		}
+
+		/*for (int i = 0; i < pList.size(); i++) {
+			Events evt = (Events) pList.get(i);
+			if (evt.getDeviceID().equals(dvId)) {
+				String request = "";
+				if (nb == 0){
+					dateEVdeb = evt.getDateEvt();
+					request = request + "loc=" + evt.getLatitude() + "," + evt.getLongitude(); // point de départ
+					nbreq++;
+				}
 				int k = i + 20;
 				if (k >= pList.size())
 					k = pList.size();
@@ -314,6 +447,8 @@ public class mainReport {
 										duree = (evtp.getDateEvt().getTime() - evtnxt.getDateEvt().getTime()) / 1000.0;
 								}
 								dureearret = (int) (dureearret + duree); // Calcul temps d'arrêt
+								request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude(); //pour le calcul de distance, en prend en compte que les arrêts
+								nbreq++;
 							}	
 
 						if (evtnxt.getSpeed() > speedmax) {
@@ -321,8 +456,6 @@ public class mainReport {
 							latitudemax = evtnxt.getLatitude();
 							longitudemax = evtnxt.getLongitude();
 						}
-						request = request + "loc=" + evtnxt.getLatitude() + "," + evtnxt.getLongitude();
-						nbreq++;
 					}
 				}
 				if (nbreq > 1) {
@@ -331,7 +464,7 @@ public class mainReport {
 					double distcalc = Double.parseDouble(rep) / 1000.0;
 					if (distcalc < 100.)
 						distance = distance + distcalc;
-					//System.out.println("Distance: " + distcalc + " total: "+(int) distance + "kms" + " req:"+request);
+					System.out.println("Distance: " + distcalc + " total: "+(int) distance + "kms" + " req:"+request);
 				}
 				nbreq = 0;
 				dateEVlast = evt.getDateEvt();
@@ -339,7 +472,7 @@ public class mainReport {
 				i = k - 1;
 				nb++;
 			}
-		}
+		}*/
 		if (nb > 1) {
 			//System.out.println("Distance OSRM: " + deckms.format(distance));
 			// distance = (odometerKMlast + odometerOffsetKMlast) - odometreDeb;
@@ -422,6 +555,7 @@ public class mainReport {
 		formatSymbols.setDecimalSeparator('.');
 		DecimalFormat dec = new DecimalFormat("#00.000000", formatSymbols);
 
+		nbrarret=0;
 		//stopsInfos[3]=Array(Array(Array(-18.94387,47.50355,20151208065907,"",null,0),Array(-18.93862,47.50042,70152,"00-00-00 00:03:20",70512,0)
 		LinkedList<Events> pListemp = new LinkedList<Events>();
 		for (int i = 0; i < pList.size(); i++) {
@@ -452,11 +586,12 @@ public class mainReport {
 		  	   			stopsInfos = stopsInfos + ", Array("+ dec.format(evt.getLatitude())+", "+ dec.format(evt.getLongitude())+", " + datem +", "+temps+", " + temps2 + ", "+ evt.getSpeed()+")";
 		  	   			indexlast = i;
 		  	   			nbstop++;
+		  	   			nbrarret++;
 	            	}
             	}
             }
 		}
-		if (pListemp.size() > 1 && indexlast!=(pListemp.size()-1)){
+		if (pListemp.size() > 2 && indexlast!=(pListemp.size()-1)){
 			Events evt = (Events) pListemp.get(pListemp.size()-1);
 	      	stopsInfos = stopsInfos + ", Array(" + dec.format(evt.getLatitude())+", "+ dec.format(evt.getLongitude())+", "+new SimpleDateFormat("yyyyMMddHHmmss").format(evt.getDateEvt())+", \"\", null, "+evt.getSpeed()+")";
 		}
@@ -500,7 +635,7 @@ public class mainReport {
 
 		formatSymbols.setDecimalSeparator('.');
 		DecimalFormat dec = new DecimalFormat("#00.000000", formatSymbols);
-        String sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as timestamp, deviceID, latitude, longitude, speedKPH FROM EventData WHERE accountID='"+acId+"' AND deviceID='"+dvId+"' ORDER BY timestamp DESC LIMIT 1;";
+        String sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as timestamp, deviceID, latitude, longitude, speedKPH FROM EventData WHERE accountID='"+acId+"' AND deviceID='"+dvId+"' AND longitude >0.0 ORDER BY timestamp DESC LIMIT 1;";
         try {
 	        rs = s.executeQuery(sql);
             if (rs.next()) {
@@ -552,59 +687,6 @@ public class mainReport {
 		
 		formatSymbols.setDecimalSeparator('.');
 		DecimalFormat dec = new DecimalFormat("#00.000000", formatSymbols);
-        /*String sql = "SELECT count(*) as nbinfo FROM datatmpEvt where deviceID='"+dvId+"';";
-        try {
-	        rs = s.executeQuery(sql);
-	        if (rs.next()) {
-	        	pathinfos = "Array(";
-	        	int nbinfo = rs.getObject("nbinfo") != null ? rs.getInt("nbinfo") : null;
-	        	if (nbinfo > 1){
-	                sql = "SELECT accountID, dateEvt as dateEV, deviceID, lat as latitude, lon as longitude, speed as speedKPH, tmps, first FROM datatmpEvt where deviceID='"+dvId+"' order by dateEV;";
-	    	        rs = s.executeQuery(sql);
-	    	        for(flag = rs.next(); flag; flag = rs.next())
-	    	        {
-	    	        	accountID = rs.getString("accountID");
-	    	            if(accountID == null)
-	    	            	accountID = "";
-	    	            deviceID = rs.getString("deviceID");
-	    	            if(deviceID == null)
-	    	            	deviceID = "";
-	    	            dateEV = rs.getTimestamp("dateEV");
-	    	            if(dateEV == null)
-	    	            	dateEV = null;
-	    	            latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
-	    	            longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
-	    	            vitesse = rs.getObject("speedKPH") != null ? rs.getInt("speedKPH") : null;
-	    	            tmps = rs.getObject("tmps") != null ? rs.getInt("tmps") : null;
-	    	            //heading = rs.getObject("heading") != null ? rs.getInt("heading") : null;
-	    	            if (nb==0) deviceIDlast = deviceID;
-	    	            if (nbpath==0) dateEVbegin = new SimpleDateFormat("yyyMMddHHmmss").format(dateEV);
-	    	            //Array(Array(-18.94375, 47.50367, 20151208070953, 289, 0), Array(-18.94341, 47.50208, 71013, 309, 32))
-	    	            if (deviceIDlast.equals(deviceID)){
-	    	            	if (nb>0) pathinfos = pathinfos + ", ";
-	    	            	if (nb==0) datem = new SimpleDateFormat("yyyyMMddHHmmss").format(dateEV);
-	    	            	else datem = new SimpleDateFormat("HHmmss").format(dateEV);
-	    	            	pathinfos = pathinfos + "Array("+latitude+", " + longitude +", " + datem +", " + tmps + ", "+ vitesse+")";
-	    	            	nbpath++;
-	    	            }
-	    	            else{
-	    	                pathinfos = pathinfos + ")";
-	    	                System.out.println(deviceIDlast);
-	    	                System.out.println(pathinfos);
-	    	                pathinfos = "Array(";
-	    	                nb = -1;
-	    	            }
-	    	            //System.out.println("accountID:" + accountID + " deviceID:" + deviceID + " date:" + dateEV + " latitude:" + latitude + " longitude:"+longitude + " vitesse:" +vitesse );
-	    	            deviceIDlast = deviceID;
-	    	            nb++;
-	    	        }
-	    	        if (nbpath > 0) dateEVend = new SimpleDateFormat("yyyMMddHHmmss").format(dateEV);	        		
-	        	}
-	        }
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}*/
   		for (int i = 0; i < pList.size();i++){
   			Events evt = (Events) pList.get(i);
   			accountID = evt.getAccountID();
@@ -745,34 +827,19 @@ public class mainReport {
 
 	public static String createsecuInfos(String dvId, int irang, LinkedList pList){
 		String secuInfos = "";
-		int nbrarret = 0;
 		int nbinfo = 0;
 		int nbrdepvitesse = 0;
 		
         for (int i=0; i < pList.size() ; i++){
    			Events evt = (Events) pList.get(i);
    			if (evt.getDeviceID().equalsIgnoreCase(dvId)){   
- 	            if (evt.getSpeed() < 1 ){ // Vérification nombre d'arrêt
+ 	            /*if (evt.getSpeed() < 1 ){ // Vérification nombre d'arrêt
  	            	int tmps = getDuration(pList, dvId, i);
 	            	if (tmps > ARRET_MAX){
 	       				nbrarret ++;
 	       				nbinfo ++;
 	            	}
-	       			/*long diff = 0L;
-	       			int dureeTH = 0;
-	       			int k = i + 1;
-	       			if (k < pList.size()){
-	           			Events evtnxt = (Events) pList.get(k);
-	           			if (evtnxt.getDeviceID().equalsIgnoreCase(dvId)){   
-		           			diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
-		    	            dureeTH = (int) diff / 1000;
-	           			}
-	       			}
-	       			if (dureeTH > 10) {
-	       				nbrarret ++;
-	       				nbinfo ++;
-	       			}*/
- 	            }   				
+ 	            }  */ 				
  	            if (evt.getSpeed() > evt.getSpeedMax()){ // Vérification vitesse maximum
  	            	nbrdepvitesse ++; 	
  	            	nbinfo ++;
@@ -780,7 +847,7 @@ public class mainReport {
    			}
         }
         if (nbinfo > 0){
-        	nbrarret = nbrarret - 2; //On enlève le point de départ et d'arrivé
+        	//nbrarret = nbrarret - 2; //On enlève le point de départ et d'arrivé
         	if (nbrarret <1 ) nbrarret = 0;
         	secuInfos = secuInfos + "<div id=\"secu"+irang+"\" class=\"secuInfos\"><img id=\"imgEvent"+irang+"\" class=\"siCatIcon\"/><label class=\"siLabel\">Ev&egrave;nements";
         	secuInfos = secuInfos + "</label><hr /><br /><table><tr><td><table class=\"alignToChart tableSecuInfos\"><tr><td class=\"tsiLabel\">Nombre total d'arr&ecirc; ts</td>";
@@ -825,8 +892,33 @@ public class mainReport {
 
 	private static int getDuration(LinkedList pList, String dvId, int index){
 		int tmps = 0;
+
+		Events evt = (Events) pList.get(index);
+	  	tmps = 0;
+	  		if (index == 0){
+  	  			for (int j=index+1;j<pList.size(); j++) {
+	  				Events evtnxt = (Events) pList.get(j);
+	  				if (evtnxt.getSpeed()> 1.0){
+	  					double diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
+	  					tmps = (int) diff / 1000;
+	  					j = pList.size();
+	  				}
+  	  			}
+  	  		}else {
+  	  			Events evtbef = (Events) pList.get(index-1);
+  	  			if (evtbef.getSpeed()> 0.){
+	  	  			for (int j=index+1;j<pList.size(); j++) {
+		  				Events evtnxt = (Events) pList.get(j);
+		  				if (evtnxt.getSpeed()> 1.0){
+		  					double diff = evtnxt.getDateEvt().getTime() - evt.getDateEvt().getTime();
+		  					tmps = (int) diff / 1000;
+		  					j = pList.size();
+		  				}
+	  	  			}
+  	  			}
+  	  		}
 		
-		for (int i = index; i < pList.size(); i++) {
+		/*for (int i = index; i < pList.size(); i++) {
 			Events evt = (Events) pList.get(i);
 			if (evt.getDeviceID().equals(dvId)) {
   	  			int k = i + 1;
@@ -840,7 +932,7 @@ public class mainReport {
   	       			}   	       			
   	   			}				
 			}
-		}
+		}*/
 		//System.out.println("duree: "+tmps);
 		return tmps;
 	}
@@ -909,10 +1001,10 @@ public class mainReport {
         LinkedList<Events> eventsList = new LinkedList<Events>();	
         
         StringBuffer sb = new StringBuffer();
-        String sentence = "CREATE TEMPORARY TABLE datatmpEvt( tmpid int NOT NULL AUTO_INCREMENT, accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int, tmps int, first boolean, odometerKM double, odometerOffsetKM double, statusCode int, deviceSpeedLimit int,PRIMARY KEY(tmpid), INDEX(tmpid));";
+        //String sentence = "CREATE TEMPORARY TABLE datatmpEvt( tmpid int NOT NULL AUTO_INCREMENT, accountID varchar(45), deviceID varchar(45), dateEvt Timestamp, lat double, lon double, speed int, tmps int, first boolean, odometerKM double, odometerOffsetKM double, statusCode int, deviceSpeedLimit int,PRIMARY KEY(tmpid), INDEX(tmpid));";
         try {
     		Statement st = c.createStatement();
-            s.executeUpdate(sentence);
+            //s.executeUpdate(sentence);
             String sql = "SELECT count(*) as nbrDevice from Device WHERE accountID='"+account+"';";
             ResultSet rs1 = st.executeQuery(sql);
             if (rs1.next()) {
@@ -931,7 +1023,8 @@ public class mainReport {
  	            //String sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as timestamp, deviceID, latitude, longitude, speedKPH FROM EventData WHERE accountID='telo' and deviceID='telo1' and DATE_FORMAT(FROM_UNIXTIME(timestamp),'%y-%m-%d') = DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 day),'%y-%m-%d') order by deviceID,timestamp;";
             	//DATE_FORMAT(NOW(),'%y-%m-%d')
             	sql = "SELECT accountID, FROM_UNIXTIME(timestamp) as timestamp, deviceID, latitude, longitude, speedKPH, odometerKM, odometerOffsetKM, statusCode FROM EventData WHERE accountID='"+account+"' and longitude <> 0.0 and FROM_UNIXTIME(timestamp) >= '"+date_trt+"' and FROM_UNIXTIME(timestamp) <= '"+date_fin+"' order by deviceID,timestamp;";
-		        rs = st.executeQuery(sql);
+            	System.out.println(sql);
+            	rs = st.executeQuery(sql);
 		        // lecture premier enregistrement
 	            if (rs.next()) {
 	            	acIDlast = rs.getObject("accountID") != null ? rs.getString("accountID") : null;
@@ -955,7 +1048,8 @@ public class mainReport {
                 			
                 	}
                 	eventsList.add(new Events(acIDlast, devIDlast, latitudelast, longitudelast, vitesselast, dateEVlast, odometerKMlast, odometerOffsetKMlast, statusCode, speedLimit));
-       				Events evt = (Events) eventsList.get(0);
+                	nbevt++;
+       				//Events evt = (Events) eventsList.get(0);
        				//System.out.println(evt.getAccountID() + " " + evt.getDeviceID() + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()) + " " + dec.format(evt.getLatitude()) + " "+ dec.format(evt.getLongitude()) + " " + evt.getSpeed() + " " + evt.getOdometerKM() + " " + evt.getSpeedMax() + " "+evt.getStatusCode());
 	            	
 			        for(flag = rs.next(); flag; flag = rs.next())
@@ -979,25 +1073,55 @@ public class mainReport {
 	                			
 	                	}
 	                	if (devIDlast.equalsIgnoreCase(devID)){
-		                	if (vitesse == 0.0 && vitesselast == 0.0){
-		                	} else {
-		                		long diff = dateEV.getTime() - dateEVlast.getTime() ;
-		                		duree = (int) diff / 1000;
-		                		if (duree > 120){
-		                			eventsList = addpointsList(acID, devID, eventsList, latitude, longitude, dateEV, vitesse, odometerKM, odometerOffsetKM, statusCode, speedLimit);
-		                		} else {
+		                	/*if (vitesse == 0.0 && vitesselast == 0.0 && (odometerKM - odometerKMlast) < 1){
+		                	} 
+		                	else*/{
+		                		if (INTERPOLATION){
+			                		long diff = dateEV.getTime() - dateEVlast.getTime() ;
+			                		duree = (int) diff / 1000;
+			                		if (duree > 120){
+			                			eventsList = addpointsList(acID, devID, eventsList, latitude, longitude, dateEV, vitesse, odometerKM, odometerOffsetKM, statusCode, speedLimit);
+			                			nbevt++;
+			                		} else {
+			                			eventsList.add(new Events(acID, devID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
+			                			nbevt++;
+			               				//evt = (Events) eventsList.get(eventsList.size()-1);
+			               				//System.out.println(evt.getAccountID() + " " + evt.getDeviceID() + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()) + " " + dec.format(evt.getLatitude()) + " "+ dec.format(evt.getLongitude()) + " " + evt.getSpeed() + " " + evt.getOdometerKM() + " " + evt.getSpeedMax() + " "+evt.getStatusCode());
+			                		}
+		                		} else{
 		                			eventsList.add(new Events(acID, devID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
-		               				evt = (Events) eventsList.get(eventsList.size()-1);
-		               				//System.out.println(evt.getAccountID() + " " + evt.getDeviceID() + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()) + " " + dec.format(evt.getLatitude()) + " "+ dec.format(evt.getLongitude()) + " " + evt.getSpeed() + " " + evt.getOdometerKM() + " " + evt.getSpeedMax() + " "+evt.getStatusCode());
+		                			nbevt++;
+		                		}
+		                		if (vitesse == 0.0 && vitesselast == 0.0){
+		                			
+		                		}else {
+						            devIDlast = devID;
+					            	acIDlast = acID;
+					                dateEVlast = dateEV;
+					                latitudelast = latitude;
+					                longitudelast = longitude;
+					                vitesselast = vitesse;
+					                odometerKMlast = odometerKM;
+					                odometerOffsetKMlast = odometerOffsetKM;
+					                statusCodelast = statusCode;
 		                		}
 		                	}
 	                	} else {
 	                		eventsList.add(new Events(acID, devID, latitude, longitude, vitesse, dateEV, odometerKM, odometerOffsetKM, statusCode, speedLimit));
-               				evt = (Events) eventsList.get(eventsList.size()-1);
+				            devIDlast = devID;
+			            	acIDlast = acID;
+			                dateEVlast = dateEV;
+			                latitudelast = latitude;
+			                longitudelast = longitude;
+			                vitesselast = vitesse;
+			                odometerKMlast = odometerKM;
+			                odometerOffsetKMlast = odometerOffsetKM;
+			                statusCodelast = statusCode;	                		
+               				//evt = (Events) eventsList.get(eventsList.size()-1);
                				//System.out.println(evt.getAccountID() + " " + evt.getDeviceID() + " " + new SimpleDateFormat("yyy-MM-dd HH:mm:ss").format(evt.getDateEvt()) + " " + dec.format(evt.getLatitude()) + " "+ dec.format(evt.getLongitude()) + " " + evt.getSpeed() + " " + evt.getOdometerKM() + " " + evt.getSpeedMax() + " "+evt.getStatusCode());
 	                	}
 	                    
-		                if (devIDlast.equalsIgnoreCase(devID) && vitesse < 1 && vitesselast < 1) {
+		                /*if (devIDlast.equalsIgnoreCase(devID) && vitesse < 1 && vitesselast < 1) {
 		                	topwrite = false;
 		                }
 		                else {	
@@ -1052,9 +1176,9 @@ public class mainReport {
 				                odometerOffsetKMlast = odometerOffsetKM;
 				                statusCodelast = statusCode;
 				                first = false;
-		                }
+		                }*/
 		            }
-	                if (topwrite){
+	                /*if (topwrite){
 	                	for(int id=0 ;id < nbrDevice;id++){
 	                		if (devIDlast.equalsIgnoreCase(deviceID[id])){
 	                			speedLimit = Integer.parseInt(deviceSpeedLimit[id]);
@@ -1078,7 +1202,7 @@ public class mainReport {
 	    	                pstmt.setInt(12, speedLimit);
 			                pstmt.executeUpdate();
 				            nbevt++;
-	                }
+	                }*/
 	            }
 		        rs2.close();
             }
@@ -1235,7 +1359,7 @@ public class mainReport {
 				JSONObject genreJsonObject = (JSONObject) JSONValue.parseWithException(genreJson);
 									
 				JSONObject firstGenre = (JSONObject) genreJsonObject.get("route_summary");
-				//System.out.println(firstGenre.get("total_distance").toString());
+				System.out.println(firstGenre.get("total_distance").toString());
 				distance = firstGenre.get("total_distance").toString();
 			}
 			
@@ -1343,6 +1467,7 @@ public class mainReport {
 		  return poly;
 	}
 
+	    // ------------------------------------------------------------------------
 	
 
 }
