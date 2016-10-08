@@ -15,10 +15,11 @@ public class Events implements Comparable<Events>{
 	  protected double OdometerOffsetKM;
 	  protected int StatusCode;
 	  protected int SpeedMax;
+	  protected int Heading;
 
 
 	  public Events(String AccountID, String DeviceID, double Latitude, double Longitude, double Speed,
-			  Timestamp DateEvt, double OdometerKM, double OdometerOffsetKM, int StatusCode, int SpeedMax) {
+			  Timestamp DateEvt, double OdometerKM, double OdometerOffsetKM, int StatusCode, int SpeedMax, int Heading) {
 
 	     this.AccountID = AccountID;
 	     this.DeviceID = DeviceID;
@@ -30,6 +31,7 @@ public class Events implements Comparable<Events>{
 	     this.OdometerOffsetKM = OdometerOffsetKM;
 	     this.StatusCode = StatusCode;	     
 	     this.SpeedMax = SpeedMax;	     
+	     this.Heading = Heading;	     
 	  }
 
 	  /**
@@ -102,9 +104,14 @@ public class Events implements Comparable<Events>{
 	    return OdometerOffsetKM;
 	  }
 
-	  public double getStatusCode() {
+	  public int getStatusCode() {
 		    return StatusCode;
 		  }
+
+	  public int getHeading() {
+		    return Heading;
+	  }
+
 	  /**
 	   Set the type of the ticket.
 
@@ -146,6 +153,9 @@ public class Events implements Comparable<Events>{
 		  }
 	  public void setSpeedMax(int SpeedMax) {
 		    this.SpeedMax = SpeedMax;
+		  }
+	  public void setHeading(int Heading) {
+		    this.Heading = Heading;
 		  }
 
 	@Override
